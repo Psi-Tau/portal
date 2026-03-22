@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mine Programmer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Bangers&family=Roboto:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #0f172a;
+            background-image: repeating-linear-gradient(45deg, #1e293b 0, #1e293b 10px, #0f172a 10px, #0f172a 20px);
+            min-height: 100vh;
+        }
+
+        .racing-font {
+            font-family: 'Bangers', cursive;
+            letter-spacing: 2px;
+        }
+
+        .project-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .project-card:active {
+            transform: scale(0.95);
+        }
+
+        /* Glassmorphism effekt */
+        .glass {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-start p-6 text-white">
+
+    <!-- Header -->
+    <header class="w-full max-w-md text-center my-10">
+        <h1 class="racing-font text-5xl text-yellow-400 italic drop-shadow-lg mb-2">MINE APPER</h1>
+        <p class="text-slate-400 text-sm uppercase tracking-widest font-bold">Klar for start? Velg et program</p>
+    </header>
+
+    <!-- Hovedmeny -->
+    <main class="w-full max-w-md space-y-4">
+        
+        <!-- Gange-racer -->
+        <a href="matte-racer1.html" class="project-card block glass p-6 rounded-2xl border-l-8 border-yellow-500 hover:bg-slate-700 active:bg-slate-600 shadow-xl group">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="racing-font text-3xl text-white group-hover:text-yellow-400 transition-colors">GANGE-RACER</h2>
+                    <p class="text-slate-400 text-sm">Tren på gangetabellen i full fart!</p>
+                </div>
+                <div class="text-3xl">🏎️</div>
+            </div>
+        </a>
+
+        <!-- Program 2 -->
+        <a href="program2.html" class="project-card block glass p-6 rounded-2xl border-l-8 border-blue-500 hover:bg-slate-700 active:bg-slate-600 shadow-xl group">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="racing-font text-3xl text-white group-hover:text-blue-400 transition-colors">PROGRAM 2</h2>
+                    <p class="text-slate-400 text-sm">Beskrivelse av ditt andre prosjekt.</p>
+                </div>
+                <div class="text-3xl">💻</div>
+            </div>
+        </a>
+
+        <!-- Spill -->
+        <a href="spill.html" class="project-card block glass p-6 rounded-2xl border-l-8 border-green-500 hover:bg-slate-700 active:bg-slate-600 shadow-xl group">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="racing-font text-3xl text-white group-hover:text-green-400 transition-colors">SPILL</h2>
+                    <p class="text-slate-400 text-sm">Utforsk spill-samlingen din.</p>
+                </div>
+                <div class="text-3xl">🎮</div>
+            </div>
+        </a>
+
+    </main>
+
+    <!-- Footer / Info -->
+    <footer class="mt-auto pt-10 text-slate-500 text-[10px] uppercase tracking-tighter">
+        Laget av en ekte koder &copy; 2024
+    </footer>
+
+</body>
+</html>
