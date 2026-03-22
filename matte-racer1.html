@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matte-racer - Sertifikat og Bilspill</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap');
+        
+        body {
+            font-family: 'Fredoka', sans-serif;
+            background-color: #f0f9ff;
+            overflow-x: hidden;
+            touch-action: manipulation;
+        }
+
+        .card {
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        }
+
+        #road-canvas {
+            background: #334155;
+            display: block;
+            border-radius: 1.5rem;
+        }
+
+        .shake {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+
+        .heat-cell {
+            aspect-ratio: 1/1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.55rem;
+            border-radius: 4px;
+        }
+
+        .confetti-piece {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            top: -20px;
+            z-index: 100;
+            opacity: 0;
+            animation: fall 3s linear forwards;
+        }
+
+        @keyframes fall {
+            0% { opacity: 1; top: -5%; transform: translateX(0) rotate(0deg); }
+            100% { opacity: 0; top: 100%; transform: translateX(100px) rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-2 md:p-4">
+
+    <div id="game-container" class="w-full max-w-2xl bg-white rounded-3xl p-4 md:p-8 card text-center relative overflow-hidden">
+        
+        <!-- Hovedmeny -->
+        <div id="level-screen">
+            <h1 class="text-5xl font-bold text-blue-600 mb-2 italic tracking-tight">Matte-racer 🏎️</h1>
+            <p class="text-gray-500 mb-6 font-medium">Velg din utfordring!</p>
+            
+            <div class="grid gap-3">
+                <!-- Gangetester -->
+                <div class="bg-blue-50 p-4 rounded-2xl border-2 border-blue-100 mb-2">
+                    <span class="text-xs font-bold text-blue-400 uppercase tracking-widest block mb-3">Gangetesten ⏱️</span>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="startTimedExam(60)" class="p-4 bg-blue-600 text-white rounded-xl font-bold shadow-md hover:bg-blue-700 transition">1 Minutt</button>
+                        <button onclick="startTimedExam(600)" class="p-4 bg-indigo-600 text-white rounded-xl font-bold shadow-md hover:bg-indigo-700 transition">10 Minutter</button>
+                    </div>
+                </div>
+
+                <button onclick="startCarGame()" class="w-full p-6 bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-2xl font-black transition-all flex items-center justify-between shadow-lg">
+                    <div class="text-left">
+                        <span class="text-2xl block uppercase">LA OSS SPILLE!</span>
+                        <span class="text-xs font-normal opacity-90">Bilspill (Sakte modus)</span>
+                    </div>
+                    <span class="text-4xl">🏎️</span>
+                </button>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="setLevel(1)" class="p-5 bg-white border-2 border-slate-100 text-slate-700 rounded-2xl font-bold hover:border-blue-300 transition-all">
+                        Nivå 1<br><span class="text-[10px] font-normal opacity-60">Knapper / Valg</span>
+                    </button>
+                    <button onclick="setLevel(2)" class="p-5 bg-white border-2 border-slate-100 text-slate-700 rounded-2xl font-bold hover:border-purple-300 transition-all">
+                        Nivå 2<br><span class="text-[10px] font-normal opacity-60">Skriv svaret</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Oppsett-skjerm -->
+        <div id="setup-screen" class="hidden">
+            <button onclick="showScreen('level')" class="text-sm text-gray-400 mb-6 hover:underline">← Tilbake</button>
+            <h2 class="text-2xl font-bold text-gray-800 mb-6">Velg område</h2>
+            <div class="grid gap-3">
+                <button onclick="startMode('odd')" class="p-4 bg-orange-400 text-white rounded-2xl font-bold hover:bg-orange-500 transition">Hvem skal ut? 🧩</button>
+                <button onclick="showScreen('nSelect')" class="p-4 bg-white border-2 border-slate-100 hover:border-blue-400 rounded-2xl font-semibold transition">En bestemt tabell</button>
+                <button onclick="startMode('1-5')" class="p-4 bg-green-500 text-white rounded-2xl font-bold hover:bg-green-600 transition">Liten tabell (1-5)</button>
+                <button onclick="startMode('5-10')" class="p-4 bg-blue-500 text-white rounded-2xl font-bold hover:bg-blue-600 transition">Stor tabell (5-10)</button>
+            </div>
+        </div>
+
+        <!-- Tabellvelger -->
+        <div id="n-selector" class="hidden">
+            <h2 class="text-2xl font-bold mb-8">Hvilken tabell?</h2>
+            <div class="grid grid-cols-5 gap-3 mb-8" id="n-buttons"></div>
+            <button onclick="showScreen('setup')" class="text-gray-400 font-medium hover:underline">Tilbake</button>
+        </div>
+
+        <!-- Spillskjerm -->
+        <div id="play-screen" class="hidden">
+            <div class="flex justify-between items-center mb-8">
+                <div class="text-left">
+                    <span id="score-display" class="text-2xl font-bold text-blue-600">0</span>
+                    <p class="text-[10px] font-bold uppercase text-gray-400">Poeng</p>
+                </div>
+                <div class="bg-gray-100 h-2 flex-grow mx-4 rounded-full overflow-hidden">
+                    <div id="progress-bar" class="h-full bg-blue-500 transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <div class="text-right">
+                    <span id="timer-display" class="text-2xl font-bold text-orange-500">0</span>
+                    <p id="timer-label" class="text-[10px] font-bold uppercase text-gray-400">Tid</p>
+                </div>
+            </div>
+
+            <div id="question-box" class="py-10 bg-slate-50 rounded-3xl border-2 border-slate-100 mb-8">
+                <div class="text-7xl font-bold text-slate-800" id="math-problem">6 × 7</div>
+                <div class="text-xl text-slate-400 mt-2 font-medium" id="math-equals">= ?</div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4" id="answer-options"></div>
+
+            <div id="input-container" class="hidden">
+                <input type="number" id="answer-input" inputmode="numeric" placeholder="?" 
+                       class="w-full text-center text-5xl font-bold p-6 border-4 border-slate-100 rounded-3xl focus:border-blue-400 outline-none transition-all">
+                <button onclick="checkInputAnswer()" class="w-full mt-4 py-5 bg-blue-600 text-white rounded-2xl font-bold text-xl shadow-xl shadow-blue-100 active:scale-95 transition-all">Sjekk</button>
+            </div>
+
+            <button onclick="forceExit()" class="mt-8 text-slate-300 hover:text-red-400 transition text-sm">Avbryt</button>
+        </div>
+
+        <!-- Bilspill-skjerm -->
+        <div id="car-play-screen" class="hidden">
+            <div class="flex justify-between items-center mb-4">
+                <div class="flex gap-4">
+                    <div class="text-left">
+                        <span id="car-score" class="text-2xl font-bold text-blue-600">0</span>
+                        <p class="text-[10px] font-bold uppercase text-gray-400">Poeng</p>
+                    </div>
+                </div>
+                <div id="car-lives" class="text-2xl">❤️❤️❤️</div>
+            </div>
+            <div class="relative bg-slate-800 rounded-2xl overflow-hidden shadow-inner">
+                <div id="car-problem-box" class="absolute top-4 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur px-6 py-2 rounded-full shadow-lg z-20 border-2 border-blue-400">
+                    <span id="car-math-text" class="text-3xl font-black text-slate-800">6 × 7</span>
+                </div>
+                <canvas id="road-canvas"></canvas>
+                <div class="absolute bottom-4 left-4 right-4 flex justify-between md:hidden z-30">
+                    <button id="car-btn-left" class="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full border-2 border-white/50 text-white text-3xl font-bold">←</button>
+                    <button id="car-btn-right" class="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full border-2 border-white/50 text-white text-3xl font-bold">→</button>
+                </div>
+            </div>
+            <button onclick="forceExit()" class="mt-4 text-slate-300 hover:text-red-400 transition text-sm">Avslutt</button>
+        </div>
+
+        <!-- Resultatskjerm -->
+        <div id="result-screen" class="hidden">
+            <span class="text-6xl mb-4 block" id="medal-icon">🏁</span>
+            <h2 class="text-4xl font-bold text-slate-800 mb-2">Ferdig!</h2>
+            <p id="final-stats" class="text-slate-500 mb-6 text-lg font-medium"></p>
+            
+            <div class="bg-slate-50 p-6 rounded-3xl mb-8 border border-slate-100">
+                <h3 class="text-xs font-bold text-slate-400 mb-4 uppercase tracking-tighter">Oversikt</h3>
+                <div id="heatmap" class="grid grid-cols-10 gap-1.5"></div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <button onclick="showScreen('level')" class="py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition">Hjem</button>
+                <button id="restart-btn" class="py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg hover:bg-blue-700 transition">Prøv igjen</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global Tilstand
+        let state = {
+            mode: '', 
+            level: 1, 
+            n: null, 
+            score: 0, 
+            attempted: 0, 
+            limit: 10,
+            timeLeft: null, 
+            timerInterval: null, 
+            gameActive: false,
+            results: {}, 
+            roundResults: [],
+            // Bilspill
+            car: { x: 0, lane: 1, targetX: 0 },
+            obstacles: [], 
+            lives: 3, 
+            speed: 0.4, 
+            roadOffset: 0, 
+            currentCarProblem: {},
+            animationFrame: null
+        };
+
+        const dom = {
+            screens: {
+                level: document.getElementById('level-screen'),
+                setup: document.getElementById('setup-screen'),
+                nSelect: document.getElementById('n-selector'),
+                play: document.getElementById('play-screen'),
+                car: document.getElementById('car-play-screen'),
+                result: document.getElementById('result-screen')
+            },
+            canvas: document.getElementById('road-canvas'),
+            input: document.getElementById('answer-input'),
+            heatmap: document.getElementById('heatmap')
+        };
+
+        function init() {
+            const nContainer = document.getElementById('n-buttons');
+            for(let i = 1; i <= 10; i++) {
+                const b = document.createElement('button');
+                b.className = "p-4 bg-blue-50 hover:bg-blue-500 hover:text-white text-blue-700 rounded-xl font-bold border-2 border-blue-100 transition-all";
+                b.innerText = i;
+                b.onclick = () => startMode('n', i);
+                nContainer.appendChild(b);
+            }
+            dom.input.addEventListener('keypress', (e) => e.key === 'Enter' && checkInputAnswer());
+            
+            window.addEventListener('keydown', (e) => {
+                if (state.gameActive && !dom.screens.car.classList.contains('hidden')) {
+                    if (e.key === 'ArrowLeft') moveCar(-1);
+                    if (e.key === 'ArrowRight') moveCar(1);
+                }
+            });
+            document.getElementById('car-btn-left').onclick = () => moveCar(-1);
+            document.getElementById('car-btn-right').onclick = () => moveCar(1);
+        }
+
+        function forceExit() {
+            // Stopper alt og går til hovedmeny umiddelbart
+            state.gameActive = false;
+            if (state.timerInterval) clearInterval(state.timerInterval);
+            if (state.animationFrame) cancelAnimationFrame(state.animationFrame);
+            showScreen('level');
+        }
+
+        function showScreen(key) {
+            // Sikrer at alle timere stoppes ved skjermbytte
+            if (key !== 'play' && key !== 'car') {
+                state.gameActive = false;
+                if (state.timerInterval) clearInterval(state.timerInterval);
+                if (state.animationFrame) cancelAnimationFrame(state.animationFrame);
+            }
+            
+            Object.values(dom.screens).forEach(s => s.classList.add('hidden'));
+            dom.screens[key].classList.remove('hidden');
+        }
+
+        function setLevel(lvl) {
+            state.level = lvl;
+            showScreen('setup');
+        }
+
+        // --- GANGTESTEN (1 / 10 min) ---
+        function startTimedExam(seconds) {
+            showScreen('play');
+            state.timeLeft = seconds;
+            state.mode = 'exam';
+            state.score = 0;
+            state.attempted = 0;
+            state.limit = Infinity;
+            state.roundResults = [];
+            state.gameActive = true;
+            
+            document.getElementById('answer-options').classList.add('hidden');
+            document.getElementById('input-container').classList.remove('hidden');
+            
+            document.getElementById('timer-label').innerText = "Tid igjen";
+            document.getElementById('timer-display').innerText = formatTime(state.timeLeft);
+
+            // Fjern gammel intervall hvis den finnes
+            if (state.timerInterval) clearInterval(state.timerInterval);
+
+            state.timerInterval = setInterval(() => {
+                if (!state.gameActive) {
+                    clearInterval(state.timerInterval);
+                    return;
+                }
+                state.timeLeft--;
+                document.getElementById('timer-display').innerText = formatTime(state.timeLeft);
+                if (state.timeLeft <= 0) {
+                    clearInterval(state.timerInterval);
+                    endGame();
+                }
+            }, 1000);
+
+            document.getElementById('restart-btn').onclick = () => startTimedExam(seconds);
+            generateClassicProblem();
+        }
+
+        function startMode(mode, n = null) {
+            showScreen('play');
+            state.mode = mode;
+            state.n = n;
+            state.score = 0;
+            state.attempted = 0;
+            state.limit = 10;
+            state.timeLeft = null;
+            state.roundResults = [];
+            state.gameActive = true;
+
+            if (state.level === 2 && mode !== 'odd') {
+                document.getElementById('answer-options').classList.add('hidden');
+                document.getElementById('input-container').classList.remove('hidden');
+            } else {
+                document.getElementById('answer-options').classList.remove('hidden');
+                document.getElementById('input-container').classList.add('hidden');
+            }
+
+            document.getElementById('timer-label').innerText = "Oppgave";
+            document.getElementById('restart-btn').onclick = () => startMode(mode, n);
+            generateClassicProblem();
+        }
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        // --- OPPGAVELOGIKK ---
+        function generateClassicProblem() {
+            let a, b, isOdd = state.mode === 'odd';
+            
+            if (state.mode === 'exam') {
+                a = Math.floor(Math.random() * 10) + 1;
+                b = Math.floor(Math.random() * 10) + 1;
+            } else if (isOdd) {
+                a = Math.floor(Math.random() * 9) + 2; b = 1;
+            } else if (state.mode === 'n') {
+                a = state.n; b = Math.floor(Math.random() * 10) + 1;
+            } else if (state.mode === '1-5') {
+                a = Math.floor(Math.random() * 5) + 1; b = Math.floor(Math.random() * 10) + 1;
+            } else if (state.mode === '5-10') {
+                a = Math.floor(Math.random() * 6) + 5; b = Math.floor(Math.random() * 10) + 1;
+            }
+
+            state.currentProblem = { a, b, ans: a * b, isOdd, key: `${a}x${b}` };
+            document.getElementById('score-display').innerText = state.score;
+            
+            if (state.timeLeft === null) {
+                document.getElementById('timer-display').innerText = `${state.attempted + 1}/${state.limit}`;
+                document.getElementById('progress-bar').style.width = `${(state.attempted / state.limit) * 100}%`;
+            } else {
+                document.getElementById('progress-bar').style.width = '0%';
+            }
+            
+            document.getElementById('math-problem').innerText = isOdd ? `${a}-gangen` : `${a} × ${b}`;
+            document.getElementById('math-equals').innerText = isOdd ? "Hvilket er FEIL?" : "= ?";
+            
+            renderClassicOptions();
+        }
+
+        function renderClassicOptions() {
+            const container = document.getElementById('answer-options');
+            container.innerHTML = '';
+            if (!container.classList.contains('hidden')) {
+                let options = [];
+                if (state.currentProblem.isOdd) {
+                    const table = state.currentProblem.a;
+                    while(options.length < 3) {
+                        let r = (Math.floor(Math.random() * 10) + 1) * table;
+                        if(!options.includes(r)) options.push(r);
+                    }
+                    let odd = Math.floor(Math.random() * (table * 10)) + 2;
+                    while(odd % table === 0) odd++;
+                    options.push(odd);
+                    state.currentProblem.correctChoice = odd;
+                } else {
+                    options = [state.currentProblem.ans];
+                    while(options.length < 4) {
+                        let fake = state.currentProblem.ans + (Math.floor(Math.random() * 5) + 1) * (Math.random() > 0.5 ? 1 : -1);
+                        if(fake > 0 && !options.includes(fake)) options.push(fake);
+                    }
+                    state.currentProblem.correctChoice = state.currentProblem.ans;
+                }
+                options.sort(() => Math.random() - 0.5).forEach(opt => {
+                    const btn = document.createElement('button');
+                    btn.className = "p-6 bg-white border-2 border-slate-100 rounded-2xl text-2xl font-bold hover:border-blue-400 transition-all";
+                    btn.innerText = opt;
+                    btn.onclick = () => handleClassicAnswer(opt, btn);
+                    container.appendChild(btn);
+                });
+            } else {
+                dom.input.value = '';
+                setTimeout(() => dom.input.focus(), 50);
+            }
+        }
+
+        function handleClassicAnswer(choice, el) {
+            const isCorrect = choice == (state.currentProblem.isOdd ? state.currentProblem.correctChoice : state.currentProblem.ans);
+            const key = state.currentProblem.key;
+            if(!state.results[key]) state.results[key] = { correct: 0, total: 0 };
+            state.results[key].total++;
+
+            if(isCorrect) {
+                state.score++;
+                state.results[key].correct++;
+                if(el) el.classList.add('bg-green-100', 'border-green-500');
+                else dom.input.classList.add('border-green-400');
+                state.attempted++;
+                setTimeout(() => {
+                    if (state.timeLeft === null && state.attempted >= state.limit) {
+                        endGame();
+                    } else if (state.gameActive) {
+                        if(!el) dom.input.classList.remove('border-green-400');
+                        generateClassicProblem();
+                    }
+                }, 200);
+            } else {
+                if(el) el.classList.add('shake', 'bg-red-100', 'border-red-500');
+                else { dom.input.classList.add('shake', 'border-red-400'); setTimeout(() => dom.input.value = '', 400); }
+                setTimeout(() => { 
+                    if(el) el.classList.remove('shake'); 
+                    if(!el) dom.input.classList.remove('shake', 'border-red-400'); 
+                }, 500);
+            }
+            document.getElementById('score-display').innerText = state.score;
+        }
+
+        function checkInputAnswer() {
+            handleClassicAnswer(dom.input.value, null);
+        }
+
+        // --- BILSSPILL ---
+        let lanes = [];
+        function startCarGame() {
+            showScreen('car');
+            const ctx = dom.canvas.getContext('2d');
+            dom.canvas.width = dom.canvas.parentElement.clientWidth;
+            dom.canvas.height = 450;
+            lanes = [dom.canvas.width/6, dom.canvas.width/2, (dom.canvas.width/6)*5];
+            
+            state.score = 0; state.lives = 3; state.speed = 0.4; state.obstacles = [];
+            state.car = { x: lanes[1], lane: 1, targetX: lanes[1] };
+            state.gameActive = true;
+            
+            document.getElementById('restart-btn').onclick = startCarGame;
+            newCarProblem();
+            state.animationFrame = requestAnimationFrame(carLoop);
+        }
+
+        function moveCar(dir) {
+            if(!state.gameActive) return;
+            state.car.lane = Math.max(0, Math.min(2, state.car.lane + dir));
+            state.car.targetX = lanes[state.car.lane];
+        }
+
+        function newCarProblem() {
+            const a = Math.floor(Math.random() * 8) + 2;
+            const b = Math.floor(Math.random() * 8) + 2;
+            state.currentCarProblem = { a, b, ans: a * b, key: `${a}x${b}` };
+            document.getElementById('car-math-text').innerText = `${a} × ${b}`;
+            
+            const correctLane = Math.floor(Math.random() * 3);
+            for(let i=0; i<3; i++) {
+                state.obstacles.push({
+                    x: lanes[i], y: -80, 
+                    val: i === correctLane ? state.currentCarProblem.ans : state.currentCarProblem.ans + (Math.floor(Math.random()*4)+1) * (Math.random() > 0.5 ? 1 : -1),
+                    isCorrect: i === correctLane
+                });
+            }
+            updateCarUI();
+        }
+
+        function carLoop() {
+            if(!state.gameActive) return;
+            updateCar();
+            drawCar();
+            state.animationFrame = requestAnimationFrame(carLoop);
+        }
+
+        function updateCar() {
+            state.roadOffset = (state.roadOffset + (1.5 * state.speed)) % 100;
+            state.car.x += (state.car.targetX - state.car.x) * 0.1;
+
+            for(let i=state.obstacles.length-1; i>=0; i--) {
+                const o = state.obstacles[i];
+                o.y += (1.2 + state.speed) * 1.5;
+
+                if(Math.abs(state.car.x - o.x) < 35 && Math.abs(o.y - (450-80)) < 25) {
+                    const key = state.currentCarProblem.key;
+                    if(!state.results[key]) state.results[key] = { correct: 0, total: 0 };
+                    state.results[key].total++;
+
+                    if(o.isCorrect) {
+                        state.score += 10; state.speed += 0.01;
+                        state.results[key].correct++;
+                    } else {
+                        state.lives--; state.speed = Math.max(0.3, state.speed - 0.05);
+                        dom.canvas.classList.add('shake'); setTimeout(() => dom.canvas.classList.remove('shake'), 500);
+                    }
+                    state.obstacles = [];
+                    if(state.lives <= 0) endGame();
+                    else setTimeout(newCarProblem, 600);
+                    break;
+                }
+                if(o.y > 500) state.obstacles.splice(i, 1);
+            }
+        }
+
+        function updateCarUI() {
+            document.getElementById('car-score').innerText = state.score;
+            document.getElementById('car-lives').innerText = "❤️".repeat(state.lives);
+        }
+
+        function drawCar() {
+            const ctx = dom.canvas.getContext('2d');
+            ctx.clearRect(0,0,dom.canvas.width, 450);
+            
+            ctx.strokeStyle = "rgba(255,255,255,0.15)"; ctx.setLineDash([30,30]);
+            [dom.canvas.width/3, (dom.canvas.width/3)*2].forEach(x => {
+                ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,450);
+                ctx.lineDashOffset = -state.roadOffset * 2.5; ctx.stroke();
+            });
+
+            state.obstacles.forEach(o => {
+                ctx.fillStyle = "white"; ctx.beginPath(); ctx.roundRect(o.x-30, o.y-20, 60, 40, 10); ctx.fill();
+                ctx.fillStyle = "#1e293b"; ctx.font = "bold 20px Fredoka"; ctx.textAlign="center"; ctx.fillText(o.val, o.x, o.y+7);
+            });
+
+            const cy = 450-80;
+            ctx.fillStyle = "#ef4444"; ctx.beginPath(); ctx.roundRect(state.car.x-18, cy, 36, 60, 6); ctx.fill();
+            ctx.fillStyle = "#1e293b"; ctx.fillRect(state.car.x-14, cy+5, 28, 12);
+        }
+
+        // --- VERKTØY ---
+        function endGame() {
+            state.gameActive = false;
+            if (state.timerInterval) clearInterval(state.timerInterval);
+            if (state.animationFrame) cancelAnimationFrame(state.animationFrame);
+            
+            document.getElementById('final-stats').innerText = `Poengsum: ${state.score} 🏁`;
+            generateHeatmap();
+            showScreen('result');
+            if(state.score > 30) createConfetti();
+        }
+
+        function generateHeatmap() {
+            dom.heatmap.innerHTML = '';
+            for(let i=1; i<=10; i++) {
+                for(let j=1; j<=10; j++) {
+                    const cell = document.createElement('div');
+                    const key = `${i}x${j}`;
+                    cell.className = "heat-cell text-white font-bold";
+                    cell.innerText = i*j;
+                    const res = state.results[key];
+                    if(!res) cell.classList.add('bg-slate-200');
+                    else {
+                        const ratio = res.correct / res.total;
+                        cell.classList.add(ratio === 1 ? 'bg-green-500' : ratio >= 0.5 ? 'bg-yellow-500' : 'bg-red-500');
+                    }
+                    dom.heatmap.appendChild(cell);
+                }
+            }
+        }
+
+        function createConfetti() {
+            for(let i=0; i<40; i++) {
+                const p = document.createElement('div'); p.className = 'confetti-piece';
+                p.style.left = Math.random()*100+'vw'; p.style.backgroundColor = `hsl(${Math.random()*360},70%,60%)`;
+                document.body.appendChild(p); setTimeout(() => p.remove(), 3000);
+            }
+        }
+
+        if (!CanvasRenderingContext2D.prototype.roundRect) {
+            CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+                this.beginPath(); this.moveTo(x + r, y);
+                this.arcTo(x + w, y, x + w, y + h, r); this.arcTo(x + w, y + h, x, y + h, r);
+                this.arcTo(x, y + h, x, y, r); this.arcTo(x, y, x + w, y, r);
+                this.closePath(); return this;
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
