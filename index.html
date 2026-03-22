@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Programmeringsprosjekter</title>
+  <style>
+    /* ====== Basis (stor, lesbar tekst) ====== */
+    :root{
+      --bg1: #0f172a;   /* mørk blågrå */
+      --bg2: #1e293b;   /* mellomblågrå */
+      --accent: #38bdf8;/* cyan */
+      --accent2:#a78bfa;/* lilla */
+      --card: rgba(255,255,255,0.08);
+      --card-border: rgba(255,255,255,0.18);
+      --text: #e5e7eb;  /* lys grå */
+      --muted:#cbd5e1;
+    }
+    @media (prefers-color-scheme: light){
+      :root{
+        --bg1: #f8fafc;
+        --bg2: #e2e8f0;
+        --text:#0f172a;
+        --muted:#334155;
+        --card: rgba(255,255,255,0.7);
+        --card-border: rgba(15,23,42,0.08);
+      }
+    }
+
+    html, body {
+      height: 100%;
+    }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+      color: var(--text);
+      /* Gradient bakgrunn + lett “glow” */
+      background: radial-gradient(1200px 800px at 20% 10%, rgba(56,189,248,0.25), transparent 60%),
+                  radial-gradient(900px 600px at 80% 30%, rgba(167,139,250,0.25), transparent 60%),
+                  linear-gradient(160deg, var(--bg1), var(--bg2));
+      display: grid;
+      place-items: center;
+      padding: 2rem;
+    }
+
+    /* Dekorativ, subtil animert bakgrunns-SVG (pure CSS) */
+    .grid-overlay{
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(to right, rgba(255,255,255,0.06) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255,255,255,0.06) 1px, transparent 1px);
+      background-size: 24px 24px;
+      mask-image: radial-gradient(ellipse at 50% 20%, black 30%, transparent 70%);
+      opacity: .35;
+      animation: float 18s ease-in-out infinite alternate;
+    }
+    @keyframes float {
+      from { transform: translateY(-10px); }
+      to   { transform: translateY(10px); }
+    }
+
+    /* Container/kort med glass-effekt */
+    .wrap{
+      width: min(1100px, 92vw);
+    }
+    .hero{
+      backdrop-filter: saturate(120%) blur(6px);
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: clamp(1.25rem, 2.5vw, 2rem);
+      box-shadow:
+        0 10px 25px rgba(0,0,0,0.25),
+        inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+
+    /* Tittel + undertekst */
+    h1{
+      font-size: clamp(2rem, 3.8vw, 3rem); /* STØRRE SKRIFT */
+      line-height: 1.1;
+      margin: 0 0 .5rem 0;
+      letter-spacing: .2px;
+    }
+    .subtitle{
+      font-size: clamp(1rem, 1.5vw, 1.15rem);
+      color: var(--muted);
+      margin: 0 0 1.25rem 0;
+    }
+
+    /* Horisontal fargelinje */
+    .bar{
+      height: 4px;
+      width: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 999px;
+      margin: 1rem 0 1.5rem 0;
+      box-shadow: 0 0 18px rgba(56,189,248,.35), 0 0 18px rgba(167,139,250,.35);
+    }
+
+    /* Prosjektkort/listing */
+    .grid{
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: clamp(.75rem, 1.5vw, 1rem);
+      margin-top: 1rem;
+    }
+    .card{
+      position: relative;
+      border-radius: 16px;
+      padding: 1rem;
+      background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+      border: 1px solid var(--card-border);
+      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+      overflow: hidden;
+      min-height: 120px;
+    }
+    .card:hover{
+      transform: translateY(-4px);
+      box-shadow: 0 10px 22px rgba(0,0,0,0.28);
+      border-color: rgba(255,255,255,0.28);
+    }
+    .card .tag{
+      display: inline-block;
+      font-size: .75rem;
+      color: #0b1220;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      padding: .25rem .55rem;
+      border-radius: 999px;
+      font-weight: 600;
+      letter-spacing: .2px;
+      mix-blend-mode: lighten;
+    }
+    .card h3{
+      margin: .65rem 0 .35rem 0;
+      font-size: 1.15rem;  /* større */
+      letter-spacing: .2px;
+    }
+    .card p{
+      margin: 0;
+      color: var(--muted);
+      font-size: .98rem;
+    }
+    .card a{
+      position: absolute;
+      inset: 0;
+      text-decoration: none;
+      color: inherit;
+      padding: 1rem;
+    }
+
+    /* Footer / smålenker */
+    .links{
+      display: flex;
+      gap: .75rem;
+      flex-wrap: wrap;
+      margin-top: 1.25rem;
+    }
+    .pill{
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      padding: .5rem .8rem;
+      border-radius: 999px;
+      border: 1px solid var(--card-border);
+      background: rgba(255,255,255,0.06);
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 600;
+      transition: transform .15s ease, background .15s ease, border-color .15s ease;
+    }
+    .pill:hover{
+      transform: translateY(-2px);
+      background: rgba(255,255,255,0.12);
+      border-color: rgba(255,255,255,0.25);
+    }
+  </style>
+</head>
+<body>
+  <div class="grid-overlay" aria-hidden="true"></div>
+
+  <main class="wrap">
+    <section class="hero">
+      <h1>Programmerings&nbsp;prosjekter</h1>
+      <p class="subtitle">Samleside med småprogrammer, spill og demoer. Klikk et kort for å åpne.</p>
+      <div class="bar" aria-hidden="true"></div>
+
+      <!-- Prosjektkort: Bytt href til dine faktiske filer -->
+      <div class="grid">
+        <div class="card">
+          <span class="tag">HTML</span>
+          <h3>Program 1</h3>
+          <p>Første testside: enkel interaksjon og DOM.</p>
+          <a href="program1.html" aria-label="Åpne Program 1"></a>
+        </div>
+
+        <div class="card">
+          <span class="tag">Spill</span>
+          <h3>Stigespill</h3>
+          <p>Minimal versjon uten grafikk‑tungt innhold.</p>
+          <a href="spill.html" aria-label="Åpne Stigespill"></a>
+        </div>
+
+        <div class="card">
+          <span class="tag">Canvas</span>
+          <h3>Ball‑demo</h3>
+          <p>Enkel animasjon på HTML5 canvas.</p>
+          <a href="ball.html" aria-label="Åpne Ball‑demo"></a>
+        </div>
+
+        <!-- Ekstra eksempler — kopier og endre disse etter behov -->
+        <div class="card">
+          <span class="tag">JS</span>
+          <h3>Program 2</h3>
+          <p>Events, løkker og funksjoner i praksis.</p>
+          <a href="program2.html" aria-label="Åpne Program 2"></a>
+        </div>
+
+        <div class="card">
+          <span class="tag">Prosjekt</span>
+          <h3>Prosjektmappe</h3>
+          <p>Oversikt over filer i en undermappe.</p>
+          <a href="prosjekt/index.html" aria-label="Åpne Prosjektmappe"></a>
+        </div>
+      </div>
+
+      <!-- Smålenker under kortene -->
+      <div class="links">
+        <a class="pill" href="./" aria-label="Oppdater siden">🔄 Oppdater</a>
+        <a class="pill" href="README.html">📄 README</a>
+        <a class="pill" href="https://github.com/BRUKERNAVN/REPO" target="_blank" rel="noopener">🗂️ GitHub</a>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
