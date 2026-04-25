@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nord- og Mellom-Amerika Spill</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- D3.js for kart og interaksjon -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            overflow: hidden;
+        }
+        
+        .country {
+            stroke: #94a3b8;
+            stroke-width: 0.5px;
+            vector-effect: non-scaling-stroke;
+            transition: fill 0.2s ease;
+        }
+        
+        /* USA, Canada, Mexico osv. starter som hvite */
+        .playable-country {
+            fill: #ffffff;
+            cursor: pointer;
+        }
+        
+        .playable-country:hover {
+            fill: #f1f5f9;
+        }
+        
+        /* Ikke-spillbare land er grå */
+        .other-country {
+            fill: #cbd5e1;
+        }
+        
+        .guessed {
+            fill: #4ade80 !important;
+            pointer-events: none;
+        }
+
+        .wrong {
+            fill: #f87171 !important;
+        }
+
+        /* Verktøytips */
+        #tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 50;
+        }
+    </style>
+</head>
+<body class="bg-blue-50 h-screen w-screen flex flex-col relative">
+
+    <!-- Toppmeny / UI -->
+    <header class="absolute top-0 left-0 w-full p-4 z-10 flex flex-col md:flex-row justify-between items-center gap-4 pointer-events-none">
+        <div class="bg-white/90 shadow-lg rounded-xl p-4 pointer-events-auto w-full md:w-auto text-center">
+            <h1 class="text-2xl font-bold text-gray-800">Nord- og Mellom-Amerika</h1>
+            <p class="text-sm text-gray-500">Finn landene på kartet</p>
+        </div>
+        
+        <div id="game-status" class="hidden bg-white/95 shadow-lg rounded-xl p-4 pointer-events-auto flex flex-col items-center border-b-4 border-blue-500">
+            <div class="text-gray-600 text-sm font-semibold uppercase tracking-wider mb-1">Finn dette landet:</div>
+            <div id="target-country" class="text-3xl font-bold text-blue-600 mb-2">-</div>
+            <div class="flex gap-4 text-sm font-semibold text-gray-700">
+                <span>Poeng: <span id="score">0</span> / <span id="total-countries">0</span></span>
+                <span>Feil: <span id="mistakes" class="text-red-500">0</span></span>
+                <span>Tid: <span id="timer" class="text-blue-500 font-mono">00:00</span></span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Feedback Overlay -->
+    <div id="feedback" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 text-4xl md:text-6xl font-bold opacity-0 transition-opacity duration-300 pointer-events-none drop-shadow-md text-center w-full">
+        Riktig!
+    </div>
+
+    <!-- Verktøytips -->
+    <div id="tooltip"></div>
+
+    <!-- Kartkonteiner -->
+    <main class="flex-grow w-full h-full cursor-grab active:cursor-grabbing" id="map-container">
+        <svg id="map" class="w-full h-full"></svg>
+    </main>
+
+    <!-- Start/Laste-skjerm Modal -->
+    <div id="modal" class="absolute inset-0 bg-gray-900/40 backdrop-blur-sm z-30 flex items-center justify-center">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full text-center">
+            <h2 class="text-3xl font-bold text-gray-800 mb-4">Nord-Amerika Quiz</h2>
+            <p id="loading-text" class="text-gray-600 mb-6">Laster inn kartdata...</p>
+            <button id="start-btn" class="hidden w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl transition duration-200 transform hover:scale-105">
+                Start Spill
+            </button>
+            <div id="game-over-stats" class="hidden mt-4 text-left bg-gray-50 p-4 rounded-lg">
+                <p class="font-semibold text-lg mb-2 border-b pb-1">Resultat:</p>
+                <p>Riktige: <span id="final-score" class="text-green-600 font-bold">0</span></p>
+                <p>Feil: <span id="final-mistakes" class="text-red-600 font-bold">0</span></p>
+                <p>Tid brukt: <span id="final-time" class="text-blue-600 font-bold font-mono">00:00</span></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Mappings mellom GeoJSON navn og norsk visningsnavn
+        const gameData = {
+            "Canada": "Canada",
+            "USA": "USA",
+            "United States of America": "USA",
+            "Mexico": "Mexico",
+            "Greenland": "Grønland",
+            "Guatemala": "Guatemala",
+            "Belize": "Belize",
+            "El Salvador": "El Salvador",
+            "Honduras": "Honduras",
+            "Nicaragua": "Nicaragua",
+            "Costa Rica": "Costa Rica",
+            "Panama": "Panama",
+            "Cuba": "Cuba",
+            "Jamaica": "Jamaica",
+            "Haiti": "Haiti",
+            "Dominican Republic": "Den dominikanske republikk",
+            "The Bahamas": "Bahamas",
+            "Puerto Rico": "Puerto Rico",
+            "Trinidad and Tobago": "Trinidad og Tobago"
+        };
+
+        let gameQueue = [];
+        let currentTarget = null;
+        let score = 0;
+        let mistakes = 0;
+        let totalCountries = 0;
+        let isWaitingForAnimation = false;
+        let startTime = null;
+        let timerInterval = null;
+
+        const width = 1000;
+        const height = 600;
+        const svg = d3.select("#map")
+            .attr("viewBox", `0 0 ${width} ${height}`)
+            .attr("preserveAspectRatio", "xMidYMid meet");
+
+        const g = svg.append("g");
+
+        // Bakgrunnsfarge for havet på hele kartet
+        g.append("rect")
+            .attr("width", width * 10)
+            .attr("height", height * 10)
+            .attr("x", -width * 5)
+            .attr("y", -height * 5)
+            .attr("fill", "#f0f9ff")
+            .lower();
+
+        const zoom = d3.zoom()
+            .scaleExtent([1, 20]) 
+            .on("zoom", (event) => {
+                g.attr("transform", event.transform);
+            });
+        
+        svg.call(zoom);
+
+        // Natural Earth projeksjon for å vise hele verden pent
+        const projection = d3.geoNaturalEarth1()
+            .scale(160)
+            .translate([width / 2, height / 2]);
+
+        const path = d3.geoPath().projection(projection);
+        const tooltip = d3.select("#tooltip");
+
+        d3.json("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson")
+            .then(data => {
+                g.selectAll("path")
+                    .data(data.features)
+                    .enter()
+                    .append("path")
+                    .attr("d", path)
+                    .attr("class", d => {
+                        const name = d.properties.name;
+                        return gameData[name] ? "country playable-country" : "country other-country";
+                    })
+                    .on("click", handleCountryClick)
+                    .on("mousemove", handleMouseMove)
+                    .on("mouseleave", handleMouseLeave);
+
+                // Initial zoom/pan for å sette fokus på Nord-Amerika ved start
+                svg.call(zoom.transform, d3.zoomIdentity.translate(280, 50).scale(1.2));
+
+                document.getElementById('loading-text').classList.add('hidden');
+                document.getElementById('start-btn').classList.remove('hidden');
+            })
+            .catch(error => console.error("Error loading map data:", error));
+
+        document.getElementById('start-btn').addEventListener('click', startGame);
+
+        function updateTimer() {
+            const nå = Math.floor((Date.now() - startTime) / 1000);
+            const minutter = String(Math.floor(nå / 60)).padStart(2, '0');
+            const sekunder = String(nå % 60).padStart(2, '0');
+            document.getElementById('timer').innerText = `${minutter}:${sekunder}`;
+        }
+
+        function startGame() {
+            document.getElementById('modal').classList.add('hidden');
+            document.getElementById('game-status').classList.remove('hidden');
+            document.getElementById('game-over-stats').classList.add('hidden');
+            
+            score = 0;
+            mistakes = 0;
+            updateScoreUI();
+            
+            clearInterval(timerInterval);
+            startTime = Date.now();
+            timerInterval = setInterval(updateTimer, 1000);
+            
+            const uniqueCountries = Array.from(new Set(Object.values(gameData)));
+            totalCountries = uniqueCountries.length;
+            document.getElementById('total-countries').innerText = totalCountries;
+
+            d3.selectAll('.country')
+                .classed('guessed', false)
+                .classed('wrong', false);
+
+            gameQueue = uniqueCountries.sort(() => Math.random() - 0.5);
+            nextTurn();
+        }
+
+        function nextTurn() {
+            if (gameQueue.length === 0) {
+                endGame();
+                return;
+            }
+            currentTarget = gameQueue.pop();
+            document.getElementById('target-country').innerText = currentTarget;
+        }
+
+        function handleCountryClick(event, d) {
+            if (isWaitingForAnimation || !currentTarget) return;
+
+            const geoName = d.properties.name;
+            const norName = gameData[geoName];
+
+            const element = d3.select(this);
+            if (element.classed('guessed')) return;
+
+            if (norName === currentTarget) {
+                score++;
+                d3.selectAll('.country')
+                    .filter(node => gameData[node.properties.name] === currentTarget)
+                    .classed('guessed', true);
+                
+                showFeedback("Riktig!", "text-green-600");
+                updateScoreUI();
+                nextTurn();
+            } 
+            else {
+                mistakes++;
+                updateScoreUI();
+                element.classed('wrong', true);
+                
+                const displayError = norName || geoName;
+                showFeedback(`Feil! Dette er ${displayError}`, "text-red-600");
+                
+                isWaitingForAnimation = true;
+                setTimeout(() => {
+                    element.classed('wrong', false);
+                    isWaitingForAnimation = false;
+                }, 1200);
+            }
+        }
+
+        function handleMouseMove(event, d) {
+            const geoName = d.properties.name;
+            const norName = gameData[geoName];
+            const element = d3.select(this);
+
+            if (element.classed('guessed') || !currentTarget) {
+                const display = norName || geoName;
+                tooltip.style("opacity", 1)
+                    .html(display)
+                    .style("left", (event.pageX + 15) + "px")
+                    .style("top", (event.pageY - 28) + "px");
+            } else {
+                tooltip.style("opacity", 0);
+            }
+        }
+
+        function handleMouseLeave() {
+            tooltip.style("opacity", 0);
+        }
+
+        function updateScoreUI() {
+            document.getElementById('score').innerText = score;
+            document.getElementById('mistakes').innerText = mistakes;
+        }
+
+        function showFeedback(text, colorClass) {
+            const fb = document.getElementById('feedback');
+            fb.innerText = text;
+            fb.className = `absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 text-4xl md:text-6xl font-bold drop-shadow-lg transition-opacity duration-300 pointer-events-none ${colorClass}`;
+            fb.style.opacity = 1;
+            
+            setTimeout(() => {
+                fb.style.opacity = 0;
+            }, 1000);
+        }
+
+        function endGame() {
+            currentTarget = null;
+            clearInterval(timerInterval);
+            
+            document.getElementById('modal').classList.remove('hidden');
+            document.getElementById('game-status').classList.add('hidden');
+            document.querySelector('#modal h2').innerText = "Gratulerer!";
+            document.getElementById('start-btn').innerText = "Spill igjen";
+            
+            document.getElementById('game-over-stats').classList.remove('hidden');
+            document.getElementById('final-score').innerText = score;
+            document.getElementById('final-mistakes').innerText = mistakes;
+            document.getElementById('final-time').innerText = document.getElementById('timer').innerText;
+        }
+    </script>
+</body>
+</html>

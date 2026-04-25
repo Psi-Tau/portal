@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Afrika Kartspill</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- D3.js for kart og interaksjon -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            overflow: hidden; /* Forhindrer scroll utenfor kartet */
+        }
+        
+        /* Kartstiler */
+        .country {
+            stroke: #94a3b8;
+            stroke-width: 0.5px;
+            vector-effect: non-scaling-stroke; 
+            transition: fill 0.2s ease;
+        }
+        
+        .africa-country {
+            fill: #ffffff;
+            cursor: pointer;
+        }
+        
+        .africa-country:hover {
+            fill: #fde6d2; /* Lys oransje ved hover */
+        }
+        
+        .other-country {
+            fill: #cbd5e1;
+            cursor: pointer;
+        }
+        
+        .guessed {
+            fill: #4ade80 !important; /* Grønn farge for riktig gjettede land */
+            pointer-events: none; 
+        }
+
+        .wrong {
+            fill: #f87171 !important; /* Rød farge ved feil */
+        }
+
+        /* Verktøytips */
+        #tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 50;
+        }
+    </style>
+</head>
+<body class="bg-sky-100 h-screen w-screen flex flex-col relative">
+
+    <!-- Toppmeny / UI -->
+    <header class="absolute top-0 left-0 w-full p-4 z-10 flex flex-col md:flex-row justify-between items-center gap-4 pointer-events-none">
+        <div class="bg-white/90 shadow-lg rounded-xl p-4 pointer-events-auto w-full md:w-auto text-center border-b-4 border-orange-200">
+            <h1 class="text-2xl font-bold text-gray-800">Afrika Kartspill</h1>
+            <p class="text-sm text-gray-500">Finn alle landene i Afrika</p>
+        </div>
+        
+        <div id="game-status" class="hidden bg-white/95 shadow-lg rounded-xl p-4 pointer-events-auto flex flex-col items-center border-b-4 border-orange-500">
+            <div class="text-gray-600 text-sm font-semibold uppercase tracking-wider mb-1">Finn dette landet:</div>
+            <div id="target-country" class="text-3xl font-bold text-orange-600 mb-2">Egypt</div>
+            <div class="flex gap-4 text-sm font-semibold text-gray-700">
+                <span>Poeng: <span id="score">0</span> / <span id="total-countries">0</span></span>
+                <span>Feil: <span id="mistakes" class="text-red-500">0</span></span>
+                <span>Tid: <span id="timer" class="text-blue-600">0</span>s</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Feedback Overlay -->
+    <div id="feedback" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 text-4xl md:text-6xl font-bold opacity-0 transition-opacity duration-300 pointer-events-none drop-shadow-md">
+        Riktig!
+    </div>
+
+    <!-- Verktøytips -->
+    <div id="tooltip"></div>
+
+    <main class="flex-grow w-full h-full cursor-grab active:cursor-grabbing" id="map-container">
+        <svg id="map" class="w-full h-full"></svg>
+    </main>
+
+    <!-- Modaler -->
+    <div id="modal" class="absolute inset-0 bg-gray-900/40 backdrop-blur-sm z-30 flex items-center justify-center">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full text-center">
+            <h2 class="text-3xl font-bold text-gray-800 mb-4">Afrika Quiz</h2>
+            <p id="loading-text" class="text-gray-600 mb-6">Laster inn kartdata...</p>
+            <button id="start-btn" class="hidden w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-6 rounded-xl transition duration-200 transform hover:scale-105">
+                Start Spill
+            </button>
+            <div id="game-over-stats" class="hidden mt-4 text-left bg-gray-50 p-4 rounded-lg">
+                <p class="font-semibold">Resultat:</p>
+                <p>Riktige: <span id="final-score" class="text-green-600 font-bold">0</span></p>
+                <p>Feil: <span id="final-mistakes" class="text-red-600 font-bold">0</span></p>
+                <p>Tid brukt: <span id="final-time" class="text-blue-600 font-bold">0</span> sekunder</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // MAPPING: Oversetter tekniske navn i GeoJSON-fila til norske navn brukt i spillet
+        const norNames = {
+            "Algeria": "Algerie",
+            "Angola": "Angola",
+            "Benin": "Benin",
+            "Botswana": "Botswana",
+            "Burkina Faso": "Burkina Faso",
+            "Burundi": "Burundi",
+            "Cameroon": "Kamerun",
+            "Cape Verde": "Kapp Verde",
+            "Central African Rep.": "Den sentralafrikanske republikk",
+            "Central African Republic": "Den sentralafrikanske republikk",
+            "Chad": "Tsjad",
+            "Comoros": "Komorene",
+            "Congo": "Republikken Kongo",
+            "Republic of the Congo": "Republikken Kongo",
+            "Dem. Rep. Congo": "DR Kongo",
+            "Democratic Republic of the Congo": "DR Kongo",
+            "Djibouti": "Djibouti",
+            "Egypt": "Egypt",
+            "Equatorial Guinea": "Ekvatorial-Guinea",
+            "Eritrea": "Eritrea",
+            "Ethiopia": "Etiopia",
+            "Gabon": "Gabon",
+            "Gambia": "Gambia",
+            "Ghana": "Ghana",
+            "Guinea": "Guinea",
+            "Guinea-Bissau": "Guinea-Bissau",
+            "Guinea Bissau": "Guinea-Bissau",
+            "Ivory Coast": "Elfenbenskysten",
+            "Kenya": "Kenya",
+            "Lesotho": "Lesotho",
+            "Liberia": "Liberia",
+            "Libya": "Libya",
+            "Madagascar": "Madagaskar",
+            "Malawi": "Malawi",
+            "Mali": "Mali",
+            "Mauritania": "Mauritania",
+            "Mauritius": "Mauritius",
+            "Morocco": "Marokko",
+            "Mozambique": "Mosambik",
+            "Namibia": "Namibia",
+            "Niger": "Niger",
+            "Nigeria": "Nigeria",
+            "Rwanda": "Rwanda",
+            "Sao Tome and Principe": "São Tomé og Príncipe",
+            "Senegal": "Senegal",
+            "Seychelles": "Seychellene",
+            "Sierra Leone": "Sierra Leone",
+            "Somalia": "Somalia",
+            "Somaliland": "Somaliland",
+            "South Africa": "Sør-Afrika",
+            "South Sudan": "Sør-Sudan",
+            "S. Sudan": "Sør-Sudan",
+            "Sudan": "Sudan",
+            "Swaziland": "Eswatini",
+            "eSwatini": "Eswatini",
+            "Tanzania": "Tanzania",
+            "United Republic of Tanzania": "Tanzania",
+            "Togo": "Togo",
+            "Tunisia": "Tunisia",
+            "Uganda": "Uganda",
+            "Zambia": "Zambia",
+            "Zimbabwe": "Zimbabwe",
+            "Western Sahara": "Vest-Sahara",
+            "Norway": "Norge", "Sweden": "Sverige", "Denmark": "Danmark", "Finland": "Finland", "Iceland": "Island",
+            "United Kingdom": "Storbritannia", "France": "Frankrike", "Germany": "Tyskland", "Spain": "Spania",
+            "Italy": "Italia", "Russia": "Russland", "Ukraine": "Ukraina", "Turkey": "Tyrkia", "Poland": "Polen",
+            "Brazil": "Brasil", "Argentina": "Argentina", "United States": "USA", "Canada": "Canada", "Mexico": "Mexico",
+            "China": "Kina", "Japan": "Japan", "India": "India", "Australia": "Australia", "Antarctica": "Antarktis"
+        };
+
+        const africaTargets = [
+            "Algerie", "Angola", "Benin", "Botswana", "Burkina Faso", "Burundi", "Kamerun", "Kapp Verde",
+            "Den sentralafrikanske republikk", "Tsjad", "Komorene", "Republikken Kongo", "DR Kongo", 
+            "Djibouti", "Egypt", "Ekvatorial-Guinea", "Eritrea", "Etiopia", "Gabon", "Gambia", "Ghana", 
+            "Guinea", "Guinea-Bissau", "Elfenbenskysten", "Kenya", "Lesotho", "Liberia", "Libya", 
+            "Madagaskar", "Malawi", "Mali", "Mauritania", "Mauritius", "Marokko", "Mosambik", "Namibia", 
+            "Niger", "Nigeria", "Rwanda", "São Tomé og Príncipe", "Senegal", "Seychellene", "Sierra Leone", 
+            "Somalia", "Somaliland", "Sør-Afrika", "Sør-Sudan", "Sudan", "Eswatini", "Tanzania", "Togo", 
+            "Tunisia", "Uganda", "Zambia", "Zimbabwe", "Vest-Sahara"
+        ];
+
+        let gameQueue = [];
+        let currentTarget = null;
+        let score = 0;
+        let mistakes = 0;
+        let isWaitingForAnimation = false;
+        
+        // Timer variabler
+        let seconds = 0;
+        let timerInterval = null;
+
+        const width = 1000;
+        const height = 800;
+        const svg = d3.select("#map")
+            .attr("viewBox", `0 0 ${width} ${height}`)
+            .attr("preserveAspectRatio", "xMidYMid meet");
+
+        const g = svg.append("g");
+
+        const zoom = d3.zoom()
+            .scaleExtent([1, 15]) 
+            .translateExtent([[0, 0], [width, height]])
+            .on("zoom", (event) => g.attr("transform", event.transform));
+        
+        svg.call(zoom);
+
+        const projection = d3.geoMercator()
+            .scale(130)
+            .translate([width / 2, height / 1.7]);
+
+        const path = d3.geoPath().projection(projection);
+        const tooltip = d3.select("#tooltip");
+
+        d3.json("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson")
+            .then(data => {
+                g.selectAll("path")
+                    .data(data.features)
+                    .enter()
+                    .append("path")
+                    .attr("d", path)
+                    .attr("class", d => {
+                        const name = d.properties.name;
+                        const norName = norNames[name] || name;
+                        return africaTargets.includes(norName) ? "country africa-country" : "country other-country";
+                    })
+                    .on("click", handleCountryClick)
+                    .on("mousemove", handleMouseMove)
+                    .on("mouseleave", handleMouseLeave);
+
+                document.getElementById('loading-text').classList.add('hidden');
+                document.getElementById('start-btn').classList.remove('hidden');
+            });
+
+        document.getElementById('start-btn').addEventListener('click', startGame);
+
+        function startGame() {
+            document.getElementById('modal').classList.add('hidden');
+            document.getElementById('game-status').classList.remove('hidden');
+            document.getElementById('game-over-stats').classList.add('hidden');
+            score = 0; mistakes = 0; seconds = 0;
+            updateScoreUI();
+            startTimer();
+            
+            const availableInMap = [];
+            g.selectAll('.africa-country').each(function(d) {
+                const n = norNames[d.properties.name] || d.properties.name;
+                if (!availableInMap.includes(n)) availableInMap.push(n);
+            });
+
+            document.getElementById('total-countries').innerText = availableInMap.length;
+            d3.selectAll('.africa-country').classed('guessed', false).classed('wrong', false);
+            gameQueue = availableInMap.sort(() => Math.random() - 0.5);
+            nextTurn();
+        }
+
+        function startTimer() {
+            clearInterval(timerInterval);
+            document.getElementById('timer').innerText = "0";
+            timerInterval = setInterval(() => {
+                seconds++;
+                document.getElementById('timer').innerText = seconds;
+            }, 1000);
+        }
+
+        function stopTimer() {
+            clearInterval(timerInterval);
+        }
+
+        function nextTurn() {
+            if (gameQueue.length === 0) return endGame();
+            currentTarget = gameQueue.pop();
+            document.getElementById('target-country').innerText = currentTarget;
+        }
+
+        function handleCountryClick(event, d) {
+            if (isWaitingForAnimation || !currentTarget) return;
+            const element = d3.select(this);
+            if (element.classed('guessed')) return;
+
+            const engName = d.properties.name;
+            const clickedName = norNames[engName] || engName;
+
+            if (clickedName === currentTarget) {
+                score++;
+                element.classed('guessed', true);
+                showFeedback("Riktig!", "text-green-500");
+                updateScoreUI();
+                nextTurn();
+            } else {
+                mistakes++;
+                updateScoreUI();
+                element.classed('wrong', true);
+                showFeedback(`Feil! Dette er ${clickedName}`, "text-red-500");
+                isWaitingForAnimation = true;
+                setTimeout(() => {
+                    element.classed('wrong', false);
+                    isWaitingForAnimation = false;
+                }, 1500);
+            }
+        }
+
+        function handleMouseMove(event, d) {
+            const name = d.properties.name;
+            const norName = norNames[name] || name;
+            const element = d3.select(this);
+            if (element.classed('guessed') || !currentTarget) {
+                tooltip.style("opacity", 1).html(norName)
+                    .style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 28) + "px");
+            } else {
+                tooltip.style("opacity", 0);
+            }
+        }
+
+        function handleMouseLeave() { tooltip.style("opacity", 0); }
+        
+        function updateScoreUI() {
+            document.getElementById('score').innerText = score;
+            document.getElementById('mistakes').innerText = mistakes;
+        }
+
+        function showFeedback(text, colorClass) {
+            const fb = document.getElementById('feedback');
+            fb.innerText = text;
+            fb.className = `absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 text-4xl md:text-6xl font-bold drop-shadow-lg transition-opacity duration-300 pointer-events-none ${colorClass}`;
+            fb.style.opacity = 1;
+            setTimeout(() => fb.style.opacity = 0, 1200);
+        }
+
+        function endGame() {
+            stopTimer();
+            currentTarget = null;
+            document.getElementById('modal').classList.remove('hidden');
+            document.getElementById('game-status').classList.add('hidden');
+            document.querySelector('#modal h2').innerText = "Spillet er ferdig!";
+            document.getElementById('final-score').innerText = score;
+            document.getElementById('final-mistakes').innerText = mistakes;
+            document.getElementById('final-time').innerText = seconds;
+            document.getElementById('game-over-stats').classList.remove('hidden');
+            document.getElementById('start-btn').innerText = "Spill igjen";
+        }
+    </script>
+</body>
+</html>

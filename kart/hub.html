@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geografi Hub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #0f172a; /* Mørk bakgrunn for "Hub"-følelse */
+            overflow: hidden;
+        }
+        
+        /* Kartstiler */
+        .country {
+            stroke: #1e293b;
+            stroke-width: 0.5px;
+            fill: #334155; /* Mørkegrå standardfarge */
+            transition: fill 0.2s ease, transform 0.2s ease;
+        }
+        
+        .continent-hover {
+            fill: #38bdf8 !important; /* Lysende blåfarge når man holder over */
+            cursor: pointer;
+        }
+
+        /* Spesialeffekt for Antarktis */
+        .continent-antarktis-hover {
+            fill: #f0f9ff !important;
+            filter: drop-shadow(0 0 8px #fff);
+            cursor: pointer;
+        }
+
+        .unmapped-country {
+            fill: #1e293b;
+            pointer-events: none;
+        }
+
+        /* Emoji-stil (bjørn og pingviner) */
+        .map-emoji {
+            font-size: 14px;
+            pointer-events: none;
+            user-select: none;
+            transform-origin: center;
+            display: block;
+        }
+
+        /* Verktøytips */
+        #tooltip {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.95);
+            color: #0f172a;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.1s;
+            z-index: 50;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transform: translate(-50%, -150%);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col relative text-slate-100">
+
+    <!-- Tittelområde -->
+    <header class="absolute top-0 left-0 w-full p-8 z-10 pointer-events-none text-center">
+        <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 mb-2 drop-shadow-lg">
+            GEOGRAFI HUB
+        </h1>
+        <p class="text-lg text-slate-300 font-medium">Velg en verdensdel for å starte spillet</p>
+    </header>
+
+    <!-- Verktøytips (Tooltip) -->
+    <div id="tooltip"></div>
+
+    <!-- Kartkonteiner -->
+    <main class="flex-grow w-full h-full" id="map-container">
+        <svg id="map" class="w-full h-full"></svg>
+    </main>
+
+    <!-- Modal ("Kommer snart" melding) -->
+    <div id="info-modal" class="hidden absolute inset-0 bg-slate-900/80 backdrop-blur-sm z-30 flex items-center justify-center opacity-0 transition-opacity duration-300">
+        <div class="bg-slate-800 border border-slate-700 p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center transform scale-95 transition-transform duration-300" id="modal-content">
+            <div class="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+            <h2 class="text-2xl font-bold text-white mb-2" id="modal-title">Ikke klar enda!</h2>
+            <p class="text-slate-400 mb-6" id="modal-desc">Spillet for denne verdensdelen er ikke laget enda. Prøv en av de andre blå verdensdelene!</p>
+            <button id="close-modal-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-xl transition duration-200">
+                Tilbake til Hub
+            </button>
+        </div>
+    </div>
+
+    <!-- Laster-tekst -->
+    <div id="loading" class="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+        <p class="text-slate-400 animate-pulse font-semibold text-xl">Kobler til huben...</p>
+    </div>
+
+    <script>
+        // Linker til de andre filene
+        const continentLinks = {
+            "Europa": "Europa.html",
+            "Nord-Amerika": "Nord_amerika.html",
+            "Antarktis": "Verdensdeler.html",
+            "Sør-Amerika": "sor_amerika.html",
+            "Afrika": "afrika.html",
+            "Asia": "asia.html",
+            "Oseania": "oseania.html"
+        };
+
+        // Ordbok for å finne ut hvilken verdensdel et land tilhører
+        const continentMap = {
+            "Nord-Amerika": ["Canada", "USA", "United States of America", "Mexico", "Greenland", "Guatemala", "Belize", "Honduras", "El Salvador", "Nicaragua", "Costa Rica", "Panama", "Cuba", "Jamaica", "Haiti", "Dominican Republic", "Bahamas", "The Bahamas", "Puerto Rico"],
+            "Sør-Amerika": ["Colombia", "Venezuela", "Guyana", "Suriname", "Ecuador", "Peru", "Brazil", "Bolivia", "Paraguay", "Chile", "Argentina", "Uruguay", "Falkland Islands", "French Guiana"],
+            "Europa": ["Norway", "Sweden", "Finland", "Iceland", "United Kingdom", "England", "Ireland", "Denmark", "Estonia", "Latvia", "Lithuania", "Belarus", "Poland", "Germany", "Netherlands", "Belgium", "Luxembourg", "France", "Switzerland", "Austria", "Czech Republic", "Slovakia", "Hungary", "Ukraine", "Moldova", "Romania", "Serbia", "Republic of Serbia", "Kosovo", "Montenegro", "Bosnia and Herzegovina", "Croatia", "Slovenia", "Italy", "San Marino", "Monaco", "Spain", "Portugal", "Andorra", "Malta", "Greece", "Albania", "Macedonia", "North Macedonia", "Bulgaria", "Cyprus"],
+            "Asia": ["Russia", "Turkey", "Georgia", "Armenia", "Azerbaijan", "Kazakhstan", "Uzbekistan", "Turkmenistan", "Kyrgyzstan", "Tajikistan", "Afghanistan", "Iran", "Iraq", "Syria", "Lebanon", "Israel", "Palestine", "Jordan", "Saudi Arabia", "Yemen", "Oman", "United Arab Emirates", "Qatar", "Kuwait", "Pakistan", "India", "Nepal", "Bhutan", "Bangladesh", "Sri Lanka", "Maldives", "Myanmar", "Thailand", "Laos", "Vietnam", "Cambodia", "Malaysia", "Singapore", "Indonesia", "Brunei", "Philippines", "China", "Mongolia", "North Korea", "South Korea", "Japan", "Taiwan", "Timor-Leste"],
+            "Afrika": ["Morocco", "Algeria", "Tunisia", "Libya", "Egypt", "Western Sahara", "Mauritania", "Mali", "Niger", "Chad", "Sudan", "South Sudan", "Eritrea", "Djibouti", "Somalia", "Somaliland", "Ethiopia", "Senegal", "Gambia", "Guinea-Bissau", "Guinea", "Sierra Leone", "Liberia", "Ivory Coast", "Cote d'Ivoire", "Burkina Faso", "Ghana", "Togo", "Benin", "Nigeria", "Cameroon", "Central African Republic", "Equatorial Guinea", "Gabon", "Republic of the Congo", "Democratic Republic of the Congo", "Angola", "Zambia", "Malawi", "Mozambique", "Zimbabwe", "Botswana", "Namibia", "South Africa", "Lesotho", "Eswatini", "Swaziland", "Madagascar", "Mauritius", "Comoros", "Seychelles", "Rwanda", "Burundi", "Uganda", "Kenya", "Tanzania", "United Republic of Tanzania"],
+            "Oseania": ["Australia", "Papua New Guinea", "New Zealand", "Fiji", "Solomon Islands", "Vanuatu", "New Caledonia", "Samoa", "Kiribati", "Micronesia", "Tonga", "Marshall Islands", "Palau", "Tuvalu", "Nauru"],
+            "Antarktis": ["Antarctica"]
+        };
+
+        const countryToContinent = {};
+        for (const [continent, countries] of Object.entries(continentMap)) {
+            for (const country of countries) {
+                countryToContinent[country] = continent;
+            }
+        }
+
+        function getContinentClass(continentName) {
+            return "continent-" + continentName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+        }
+
+        // D3 Oppsett
+        const width = 1000;
+        const height = 650;
+        const svg = d3.select("#map")
+            .attr("viewBox", `0 0 ${width} ${height}`)
+            .attr("preserveAspectRatio", "xMidYMid meet");
+
+        const g = svg.append("g");
+
+        const projection = d3.geoNaturalEarth1()
+            .scale(190)
+            .translate([width / 2, height / 2.1]);
+
+        const path = d3.geoPath().projection(projection);
+        const tooltip = d3.select("#tooltip");
+
+        // Hent data
+        d3.json("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson")
+            .then(data => {
+                g.selectAll("path")
+                    .data(data.features)
+                    .enter()
+                    .append("path")
+                    .attr("d", path)
+                    .attr("class", d => {
+                        const engName = d.properties.name;
+                        const continent = countryToContinent[engName];
+                        return continent ? "country " + getContinentClass(continent) : "country unmapped-country";
+                    })
+                    .on("click", handleContinentClick)
+                    .on("mousemove", handleMouseMove)
+                    .on("mouseleave", handleMouseLeave);
+
+                // Legg til pingviner på Antarktis
+                const mapEmojis = [
+                    { lat: -82, lon: 0, char: "🐧" },
+                    { lat: -82, lon: 45, char: "🐧" },
+                    { lat: -85, lon: 100, char: "🐧" },
+                    { lat: -86, lon: -40, char: "🐧" },
+                    { lat: -83, lon: -120, char: "🐧" },
+                    { lat: -85, lon: 160, char: "🐧" },
+                    // Bjørn i Canada
+                    { lat: 60, lon: -110, char: "🐻" }
+                ];
+
+                g.selectAll(".map-emoji")
+                    .data(mapEmojis)
+                    .enter()
+                    .append("text")
+                    .attr("class", "map-emoji")
+                    .attr("x", d => projection([d.lon, d.lat])[0])
+                    .attr("y", d => projection([d.lon, d.lat])[1])
+                    .text(d => d.char);
+
+                document.getElementById('loading').style.display = 'none';
+            })
+            .catch(error => console.error("Error loading map data:", error));
+
+        function handleContinentClick(event, d) {
+            const engName = d.properties.name;
+            const continent = countryToContinent[engName];
+
+            if (!continent) return;
+
+            if (continentLinks[continent]) {
+                window.location.href = continentLinks[continent];
+            } else {
+                showModal(continent);
+            }
+        }
+
+        function handleMouseMove(event, d) {
+            const engName = d.properties.name;
+            const continent = countryToContinent[engName];
+
+            d3.selectAll('.country').classed('continent-hover', false).classed('continent-antarktis-hover', false);
+
+            if (continent) {
+                const continentClass = getContinentClass(continent);
+                const elements = d3.selectAll('.' + continentClass);
+                
+                if (continent === "Antarktis") {
+                    elements.classed('continent-antarktis-hover', true);
+                } else {
+                    elements.classed('continent-hover', true);
+                }
+
+                let tooltipText = continent;
+                if (continent === "Antarktis") {
+                    tooltipText = "❄️ Antarktis <br><span class='text-xs text-cyan-600 font-normal italic'>Den hemmelige portalen</span>";
+                } else if (continentLinks[continent]) {
+                    tooltipText += "<br><span class='text-sm text-blue-500 font-normal text-xs'>Klikk for å spille!</span>";
+                }
+
+                tooltip.style("opacity", 1)
+                    .html(tooltipText)
+                    .style("left", (event.pageX) + "px")
+                    .style("top", (event.pageY) + "px");
+            } else {
+                tooltip.style("opacity", 0);
+            }
+        }
+
+        function handleMouseLeave() {
+            d3.selectAll('.country').classed('continent-hover', false).classed('continent-antarktis-hover', false);
+            tooltip.style("opacity", 0);
+        }
+
+        const modal = document.getElementById('info-modal');
+        const modalContent = document.getElementById('modal-content');
+        const closeBtn = document.getElementById('close-modal-btn');
+
+        function showModal(continent) {
+            document.getElementById('modal-title').innerText = `${continent}`;
+            document.getElementById('modal-desc').innerText = `Spillet for ${continent} er ikke klart enda! Trykk på en av de andre blå verdensdelene for å starte.`;
+            
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modalContent.classList.remove('scale-95');
+            }, 10);
+        }
+
+        closeBtn.addEventListener('click', () => {
+            modal.classList.add('opacity-0');
+            modalContent.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        });
+    </script>
+</body>
+</html>

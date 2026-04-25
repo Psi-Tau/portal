@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asia Kartspill</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- D3.js for kart og interaksjon -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            overflow: hidden; 
+        }
+        
+        .country {
+            stroke: #94a3b8;
+            stroke-width: 0.5px;
+            vector-effect: non-scaling-stroke; 
+            transition: fill 0.2s ease;
+        }
+        
+        .asia-country {
+            fill: #ffffff;
+            cursor: pointer;
+        }
+        
+        .asia-country:hover {
+            fill: #e0f2fe; /* Lys blå ved hover */
+        }
+        
+        .other-country {
+            fill: #cbd5e1;
+            cursor: pointer;
+        }
+        
+        .other-country:hover {
+            fill: #94a3b8;
+        }
+        
+        .guessed {
+            fill: #10b981 !important; /* Grønn farge */
+            pointer-events: none; 
+        }
+
+        .wrong {
+            fill: #ef4444 !important; /* Rød farge */
+        }
+
+        #tooltip {
+            position: absolute;
+            background: rgba(15, 23, 42, 0.9);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.1s;
+            z-index: 50;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+    </style>
+</head>
+<body class="bg-indigo-50 h-screen w-screen flex flex-col relative">
+
+    <!-- Toppmeny -->
+    <header class="absolute top-0 left-0 w-full p-4 z-10 flex flex-col md:flex-row justify-between items-center gap-4 pointer-events-none">
+        <div class="bg-white/90 shadow-lg rounded-xl p-4 pointer-events-auto w-full md:w-auto text-center border-b-4 border-blue-200">
+            <h1 class="text-2xl font-bold text-gray-800">Asia Kartspill</h1>
+            <p class="text-sm text-gray-500">Finn asiatiske land på verdenskartet</p>
+        </div>
+        
+        <div id="game-status" class="hidden bg-white/95 shadow-lg rounded-xl p-4 pointer-events-auto flex flex-col items-center border-b-4 border-blue-500">
+            <div class="text-gray-600 text-sm font-semibold uppercase tracking-wider mb-1">Finn dette landet:</div>
+            <div id="target-country" class="text-3xl font-bold text-blue-600 mb-2">Japan</div>
+            <div class="flex gap-4 text-sm font-semibold text-gray-700">
+                <span>Poeng: <span id="score">0</span> / <span id="total-countries">0</span></span>
+                <span>Feil: <span id="mistakes" class="text-red-500">0</span></span>
+                <span>Tid: <span id="timer" class="text-indigo-600">00:00</span></span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Feedback Overlay -->
+    <div id="feedback" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 text-4xl md:text-6xl font-bold opacity-0 transition-opacity duration-300 pointer-events-none drop-shadow-md text-center w-full">
+        Riktig!
+    </div>
+
+    <!-- Verktøytips -->
+    <div id="tooltip"></div>
+
+    <main class="flex-grow w-full h-full cursor-grab active:cursor-grabbing" id="map-container">
+        <svg id="map" class="w-full h-full"></svg>
+    </main>
+
+    <!-- Modaler -->
+    <div id="modal" class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm z-30 flex items-center justify-center">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full text-center border-t-8 border-blue-500">
+            <h2 class="text-3xl font-bold text-gray-800 mb-4">Asia på Verdenskartet!</h2>
+            <p id="loading-text" class="text-gray-600 mb-6">Laster inn kartdata...</p>
+            <button id="start-btn" class="hidden w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl transition duration-200 transform hover:scale-105">
+                Start Spill
+            </button>
+            <div id="game-over-stats" class="hidden mt-4 text-left bg-blue-50 p-4 rounded-lg border border-blue-100">
+                <p class="font-bold text-blue-800 text-lg mb-2">Spillet er ferdig!</p>
+                <p>Riktige: <span id="final-score" class="text-green-600 font-bold">0</span></p>
+                <p>Feil: <span id="final-mistakes" class="text-red-600 font-bold">0</span></p>
+                <p>Tid brukt: <span id="final-time" class="text-indigo-600 font-bold">00:00</span></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const norNames = {
+            // ASIA
+            "Afghanistan": "Afghanistan",
+            "Armenia": "Armenia",
+            "Azerbaijan": "Aserbajdsjan",
+            "Bangladesh": "Bangladesh",
+            "Bhutan": "Bhutan",
+            "Brunei": "Brunei",
+            "Cambodia": "Kambodsja",
+            "China": "Kina",
+            "Cyprus": "Kypros",
+            "Georgia": "Georgia",
+            "India": "India",
+            "Indonesia": "Indonesia",
+            "Iran": "Iran",
+            "Iraq": "Irak",
+            "Israel": "Israel",
+            "Japan": "Japan",
+            "Jordan": "Jordan",
+            "Kazakhstan": "Kasakhstan",
+            "Kuwait": "Kuwait",
+            "Kyrgyzstan": "Kirgisistan",
+            "Laos": "Laos",
+            "Lebanon": "Libanon",
+            "Malaysia": "Malaysia",
+            "Mongolia": "Mongolia",
+            "Myanmar": "Myanmar",
+            "Nepal": "Nepal",
+            "North Korea": "Nord-Korea",
+            "Oman": "Oman",
+            "Pakistan": "Pakistan",
+            "Palestine": "Palestina",
+            "Philippines": "Filippinene",
+            "Qatar": "Qatar",
+            "Russia": "Russland",
+            "Saudi Arabia": "Saudi-Arabia",
+            "Singapore": "Singapore",
+            "South Korea": "Sør-Korea",
+            "Sri Lanka": "Sri Lanka",
+            "Syria": "Syria",
+            "Taiwan": "Taiwan",
+            "Tajikistan": "Tadsjikistan",
+            "Thailand": "Thailand",
+            "Timor-Leste": "Øst-Timor",
+            "Turkey": "Tyrkia",
+            "Turkmenistan": "Turkmenistan",
+            "United Arab Emirates": "De forente arabiske emirater",
+            "Uzbekistan": "Usbekistan",
+            "Vietnam": "Vietnam",
+            "Yemen": "Yemen",
+
+            // EUROPA
+            "Norway": "Norge",
+            "Sweden": "Sverige",
+            "Denmark": "Danmark",
+            "Finland": "Finland",
+            "Iceland": "Island",
+            "United Kingdom": "Storbritannia",
+            "Ireland": "Irland",
+            "France": "Frankrike",
+            "Germany": "Tyskland",
+            "Spain": "Spania",
+            "Portugal": "Portugal",
+            "Italy": "Italia",
+            "Greece": "Hellas",
+            "Netherlands": "Nederland",
+            "Belgium": "Belgia",
+            "Switzerland": "Sveits",
+            "Austria": "Østerrike",
+            "Poland": "Polen",
+            "Czech Republic": "Tsjekkia",
+            "Slovakia": "Slovakia",
+            "Hungary": "Ungarn",
+            "Romania": "Romania",
+            "Bulgaria": "Bulgaria",
+            "Ukraine": "Ukraina",
+            "Belarus": "Belarus",
+            "Estonia": "Estland",
+            "Latvia": "Latvia",
+            "Lithuania": "Litauen",
+            "Moldova": "Moldova",
+            "Albania": "Albania",
+            "Croatia": "Kroatia",
+            "Serbia": "Serbia",
+            "Slovenia": "Slovenia",
+            "Montenegro": "Montenegro",
+            "North Macedonia": "Nord-Makedonia",
+            "Bosnia and Herz.": "Bosnia-Hercegovina",
+
+            // AFRIKA
+            "Egypt": "Egypt",
+            "Libya": "Libya",
+            "Tunisia": "Tunisia",
+            "Algeria": "Algerie",
+            "Morocco": "Marokko",
+            "Sudan": "Sudan",
+            "Ethiopia": "Etiopia",
+            "Kenya": "Kenya",
+            "South Africa": "Sør-Afrika",
+            "Nigeria": "Nigeria",
+            "Tanzania": "Tanzania",
+            "Congo": "Kongo",
+            "Dem. Rep. Congo": "DR Kongo",
+            "Angola": "Angola",
+            "Madagascar": "Madagaskar",
+
+            // NORD-AMERIKA
+            "Canada": "Canada",
+            "United States": "USA",
+            "Mexico": "Mexico",
+            "Cuba": "Cuba",
+            "Greenland": "Grønland",
+            "Guatemala": "Guatemala",
+            "Honduras": "Honduras",
+            "Panama": "Panama",
+
+            // SØR-AMERIKA
+            "Brazil": "Brasil",
+            "Argentina": "Argentina",
+            "Chile": "Chile",
+            "Colombia": "Colombia",
+            "Peru": "Peru",
+            "Venezuela": "Venezuela",
+            "Bolivia": "Bolivia",
+            "Paraguay": "Paraguay",
+            "Uruguay": "Uruguay",
+            "Ecuador": "Ecuador",
+
+            // OSEANIA
+            "Australia": "Australia",
+            "New Zealand": "New Zealand",
+            "Papua New Guinea": "Papua Ny-Guinea",
+            "Fiji": "Fiji"
+        };
+
+        // Kun asiatiske land i spill-køen
+        const asiaList = [
+            "Afghanistan", "Armenia", "Aserbajdsjan", "Bangladesh", "Bhutan", "Brunei", "Kambodsja", "Kina", "Kypros", "Georgia", "India", "Indonesia", "Iran", "Irak", "Israel", "Japan", "Jordan", "Kasakhstan", "Kuwait", "Kirgisistan", "Laos", "Libanon", "Malaysia", "Mongolia", "Myanmar", "Nepal", "Nord-Korea", "Oman", "Pakistan", "Palestina", "Filippinene", "Qatar", "Russland", "Saudi-Arabia", "Singapore", "Sør-Korea", "Sri Lanka", "Syria", "Taiwan", "Tadsjikistan", "Thailand", "Øst-Timor", "Tyrkia", "Turkmenistan", "De forente arabiske emirater", "Usbekistan", "Vietnam", "Yemen"
+        ];
+
+        let gameQueue = [];
+        let currentTarget = null;
+        let score = 0;
+        let mistakes = 0;
+        let isWaitingForAnimation = false;
+        let startTime = null;
+        let timerInterval = null;
+
+        const width = 1000;
+        const height = 650;
+        const svg = d3.select("#map")
+            .attr("viewBox", `0 0 ${width} ${height}`)
+            .attr("preserveAspectRatio", "xMidYMid meet");
+
+        const g = svg.append("g");
+
+        const zoom = d3.zoom()
+            .scaleExtent([1, 20]) 
+            .translateExtent([[0, 0], [width, height]])
+            .on("zoom", (event) => g.attr("transform", event.transform));
+        
+        svg.call(zoom);
+
+        const projection = d3.geoNaturalEarth1()
+            .scale(180)
+            .translate([width / 2, height / 2.2]);
+
+        const path = d3.geoPath().projection(projection);
+        const tooltip = d3.select("#tooltip");
+
+        d3.json("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson")
+            .then(data => {
+                g.selectAll("path")
+                    .data(data.features)
+                    .enter()
+                    .append("path")
+                    .attr("d", path)
+                    .attr("class", d => {
+                        const name = d.properties.name;
+                        const norName = norNames[name];
+                        // Sjekk om landet er i asiaList for å gi det hvit farge
+                        return asiaList.includes(norName) ? "country asia-country" : "country other-country";
+                    })
+                    .on("click", handleCountryClick)
+                    .on("mousemove", handleMouseMove)
+                    .on("mouseleave", handleMouseLeave);
+
+                document.getElementById('loading-text').classList.add('hidden');
+                document.getElementById('start-btn').classList.remove('hidden');
+            });
+
+        document.getElementById('start-btn').addEventListener('click', startGame);
+
+        function updateTimer() {
+            const nå = Math.floor((Date.now() - startTime) / 1000);
+            const minutter = String(Math.floor(nå / 60)).padStart(2, '0');
+            const sekunder = String(nå % 60).padStart(2, '0');
+            document.getElementById('timer').innerText = `${minutter}:${sekunder}`;
+        }
+
+        function startGame() {
+            document.getElementById('modal').classList.add('hidden');
+            document.getElementById('game-status').classList.remove('hidden');
+            document.getElementById('game-over-stats').classList.add('hidden');
+            
+            score = 0; 
+            mistakes = 0;
+            updateScoreUI();
+            
+            clearInterval(timerInterval);
+            document.getElementById('timer').innerText = "00:00";
+            startTime = Date.now();
+            timerInterval = setInterval(updateTimer, 1000);
+            
+            document.getElementById('total-countries').innerText = asiaList.length;
+            
+            d3.selectAll('.country').classed('guessed', false).classed('wrong', false);
+            gameQueue = [...asiaList].sort(() => Math.random() - 0.5);
+            nextTurn();
+        }
+
+        function nextTurn() {
+            if (gameQueue.length === 0) return endGame();
+            currentTarget = gameQueue.pop();
+            document.getElementById('target-country').innerText = currentTarget;
+        }
+
+        function handleCountryClick(event, d) {
+            if (isWaitingForAnimation || !currentTarget) return;
+            const element = d3.select(this);
+            if (element.classed('guessed')) return;
+
+            const engName = d.properties.name;
+            const clickedName = norNames[engName] || engName;
+
+            if (clickedName === currentTarget) {
+                score++;
+                element.classed('guessed', true);
+                showFeedback("Riktig!", "text-green-500");
+                updateScoreUI();
+                nextTurn();
+            } else {
+                mistakes++;
+                updateScoreUI();
+                element.classed('wrong', true);
+                showFeedback(`Feil! Dette er ${clickedName}`, "text-red-500");
+                isWaitingForAnimation = true;
+                setTimeout(() => {
+                    element.classed('wrong', false);
+                    isWaitingForAnimation = false;
+                }, 1500);
+            }
+        }
+
+        function handleMouseMove(event, d) {
+            const name = d.properties.name;
+            const norName = norNames[name] || name;
+            const element = d3.select(this);
+            if (element.classed('guessed') || !currentTarget) {
+                tooltip.style("opacity", 1).html(norName)
+                    .style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 28) + "px");
+            } else {
+                tooltip.style("opacity", 0);
+            }
+        }
+
+        function handleMouseLeave() { tooltip.style("opacity", 0); }
+        
+        function updateScoreUI() {
+            document.getElementById('score').innerText = score;
+            document.getElementById('mistakes').innerText = mistakes;
+        }
+
+        function showFeedback(text, colorClass) {
+            const fb = document.getElementById('feedback');
+            fb.innerText = text;
+            fb.className = `absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 text-4xl md:text-6xl font-bold drop-shadow-lg transition-opacity duration-300 pointer-events-none ${colorClass}`;
+            fb.style.opacity = 1;
+            setTimeout(() => fb.style.opacity = 0, 1200);
+        }
+
+        function endGame() {
+            clearInterval(timerInterval);
+            currentTarget = null;
+            document.getElementById('modal').classList.remove('hidden');
+            document.getElementById('game-status').classList.add('hidden');
+            document.querySelector('#modal h2').innerText = "Asia er kartlagt!";
+            document.getElementById('final-score').innerText = score;
+            document.getElementById('final-mistakes').innerText = mistakes;
+            document.getElementById('final-time').innerText = document.getElementById('timer').innerText;
+            document.getElementById('game-over-stats').classList.remove('hidden');
+            document.getElementById('start-btn').innerText = "Prøv igjen";
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oseania & Australia Spill</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    
+    <style>
+        body { font-family: 'Poppins', sans-serif; overflow: hidden; }
+        .country { stroke: #94a3b8; stroke-width: 0.3px; vector-effect: non-scaling-stroke; transition: fill 0.2s ease; }
+        
+        /* Land i Oseania som er med i spillet */
+        .playable-country { fill: #ffffff; cursor: pointer; }
+        .playable-country:hover { fill: #f1f5f9; }
+        
+        /* Resten av verden */
+        .other-country { fill: #cbd5e1; opacity: 0.6; }
+        
+        .guessed { fill: #4ade80 !important; pointer-events: none; }
+        .wrong { fill: #f87171 !important; }
+        
+        /* By-punkter */
+        .city-point { fill: #ef4444; stroke: white; stroke-width: 1px; cursor: pointer; transition: r 0.2s; }
+        .city-point:hover { r: 6; }
+        .city-guessed { fill: #4ade80 !important; stroke: #166534; pointer-events: none; r: 6 !important; }
+
+        #tooltip {
+            position: absolute; background: rgba(0, 0, 0, 0.8); color: white;
+            padding: 5px 10px; border-radius: 4px; font-size: 14px;
+            pointer-events: none; opacity: 0; z-index: 50;
+        }
+
+        /* Bakgrunnsfarge for havet */
+        #map-container { background-color: #f0f9ff; }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col relative">
+
+    <header class="absolute top-0 left-0 w-full p-4 z-10 flex flex-col md:flex-row justify-between items-center gap-4 pointer-events-none">
+        <div class="bg-white/90 shadow-lg rounded-xl p-4 pointer-events-auto text-center">
+            <h1 class="text-2xl font-bold text-gray-800 tracking-tight">Oseania & Australia</h1>
+            <p class="text-xs text-gray-500 uppercase tracking-widest font-semibold">Byer og Øynasjoner</p>
+        </div>
+        
+        <div id="game-status" class="hidden bg-white/95 shadow-lg rounded-xl p-4 pointer-events-auto flex flex-col items-center border-b-4 border-blue-500">
+            <div class="text-gray-500 text-xs font-bold uppercase mb-1">Finn dette stedet:</div>
+            <div id="target-country" class="text-3xl font-black text-blue-600 mb-2">-</div>
+            <div class="flex gap-6 text-sm font-bold text-gray-700">
+                <div class="flex flex-col items-center">
+                    <span class="text-[10px] text-gray-400 uppercase">Poeng</span>
+                    <span><span id="score">0</span> / <span id="total-tasks">0</span></span>
+                </div>
+                <!-- Ny teller for feil underveis i spillet -->
+                <div class="flex flex-col items-center border-l border-gray-200 pl-6">
+                    <span class="text-[10px] text-red-400 uppercase">Feil</span>
+                    <span id="mistakes-counter" class="text-red-500 font-bold">0</span>
+                </div>
+                <div class="flex flex-col items-center border-l border-gray-200 pl-6">
+                    <span class="text-[10px] text-gray-400 uppercase">Tid</span>
+                    <span id="timer" class="font-mono text-blue-500">00:00</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div id="feedback" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 text-5xl font-black opacity-0 transition-opacity duration-300 pointer-events-none text-center w-full"></div>
+    <div id="tooltip"></div>
+
+    <main class="flex-grow w-full h-full cursor-grab active:cursor-grabbing" id="map-container">
+        <svg id="map" class="w-full h-full"></svg>
+    </main>
+
+    <div id="modal" class="absolute inset-0 bg-slate-900/60 backdrop-blur-md z-30 flex items-center justify-center">
+        <div class="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full text-center border-t-8 border-blue-500">
+            <div class="mb-6 inline-flex p-4 bg-blue-50 rounded-full">
+                <svg class="w-12 h-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+            <h2 class="text-3xl font-extrabold text-gray-900 mb-2">Oseania Utfordring</h2>
+            <p class="text-gray-500 mb-8 leading-relaxed">Finn storbyene i Australia og de tropiske øyene i Stillehavet på verdenskartet.</p>
+            <button id="start-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-2xl transition duration-200 transform hover:-translate-y-1 shadow-lg">Start Utforskning</button>
+            <div id="game-over-stats" class="hidden mt-8 text-left bg-blue-50 p-6 rounded-2xl border border-blue-100">
+                <h3 class="font-bold text-blue-800 mb-3 text-center uppercase tracking-wider">Resultater</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-white p-3 rounded-xl shadow-sm"><p class="text-xs text-gray-400 font-bold uppercase">Riktige</p><p id="final-score" class="text-2xl font-bold text-green-600">0</p></div>
+                    <div class="bg-white p-3 rounded-xl shadow-sm"><p class="text-xs text-gray-400 font-bold uppercase">Bom</p><p id="final-mistakes" class="text-2xl font-bold text-red-600">0</p></div>
+                    <div class="bg-white p-3 rounded-xl shadow-sm col-span-2 text-center"><p class="text-xs text-gray-400 font-bold uppercase">Total Tid</p><p id="final-time" class="text-2xl font-bold text-blue-600 font-mono">00:00</p></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tasks = [
+            // Byer i Australia
+            { id: "Sydney", name: "Sydney", type: "city", coords: [151.2093, -33.8688] },
+            { id: "Melbourne", name: "Melbourne", type: "city", coords: [144.9631, -37.8136] },
+            { id: "Brisbane", name: "Brisbane", type: "city", coords: [153.0251, -27.4698] },
+            { id: "Perth", name: "Perth", type: "city", coords: [115.8605, -31.9505] },
+            { id: "Adelaide", name: "Adelaide", type: "city", coords: [138.6007, -34.9285] },
+            { id: "Canberra", name: "Canberra", type: "city", coords: [149.1300, -35.2809] },
+            { id: "Hobart", name: "Hobart", type: "city", coords: [147.3272, -42.8821] },
+            { id: "Darwin", name: "Darwin", type: "city", coords: [130.8444, -12.4634] },
+            // Land og øyer
+            { id: "Australia", name: "Australia", type: "country" },
+            { id: "New Zealand", name: "New Zealand", type: "country" },
+            { id: "Papua New Guinea", name: "Papua Ny-Guinea", type: "country" },
+            { id: "Fiji", name: "Fiji", type: "country" },
+            { id: "Solomon Islands", name: "Salomonøyene", type: "country" },
+            { id: "Vanuatu", name: "Vanuatu", type: "country" },
+            { id: "New Caledonia", name: "Ny-Caledonia", type: "country" }
+        ];
+
+        let gameQueue = [];
+        let currentTarget = null;
+        let score = 0;
+        let mistakes = 0;
+        let startTime = null;
+        let timerInterval = null;
+
+        const width = window.innerWidth, height = window.innerHeight;
+        const svg = d3.select("#map").attr("viewBox", `0 0 ${width} ${height}`);
+        const g = svg.append("g");
+
+        const projection = d3.geoMercator()
+            .scale(250)
+            .translate([width / 2.3, height / 2.2]);
+
+        const path = d3.geoPath().projection(projection);
+
+        const zoom = d3.zoom().scaleExtent([1, 15]).on("zoom", (e) => g.attr("transform", e.transform));
+        svg.call(zoom);
+
+        d3.json("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson").then(data => {
+            g.selectAll(".country")
+                .data(data.features)
+                .enter().append("path")
+                .attr("d", path)
+                .attr("class", d => {
+                    const name = d.properties.name;
+                    return tasks.find(t => t.id === name && t.type === "country") ? "country playable-country" : "country other-country";
+                })
+                .on("click", handleCountryClick);
+
+            g.selectAll(".city-point")
+                .data(tasks.filter(t => t.type === "city"))
+                .enter().append("circle")
+                .attr("class", "city-point")
+                .attr("cx", d => projection(d.coords)[0])
+                .attr("cy", d => projection(d.coords)[1])
+                .attr("r", 4)
+                .on("click", handleCityClick);
+
+            const oseaniaCenter = projection([145, -25]);
+            svg.transition().duration(1500).call(
+                zoom.transform,
+                d3.zoomIdentity.translate(width/2, height/2).scale(2.5).translate(-oseaniaCenter[0], -oseaniaCenter[1])
+            );
+        });
+
+        function startGame() {
+            document.getElementById('modal').classList.add('hidden');
+            document.getElementById('game-status').classList.remove('hidden');
+            document.getElementById('game-over-stats').classList.add('hidden');
+            score = 0; mistakes = 0;
+            updateUI();
+            startTime = Date.now();
+            timerInterval = setInterval(updateTimer, 1000);
+            gameQueue = [...tasks].sort(() => Math.random() - 0.5);
+            document.getElementById('total-tasks').innerText = tasks.length;
+            nextTurn();
+        }
+
+        function nextTurn() {
+            if (gameQueue.length === 0) return endGame();
+            currentTarget = gameQueue.pop();
+            document.getElementById('target-country').innerText = currentTarget.name;
+        }
+
+        function handleCountryClick(event, d) {
+            if (!currentTarget || currentTarget.type !== "country") return;
+            if (d.properties.name === currentTarget.id) {
+                d3.select(this).classed('guessed', true);
+                success();
+            } else if (tasks.find(t => t.id === d.properties.name)) {
+                fail();
+            }
+        }
+
+        function handleCityClick(event, d) {
+            if (!currentTarget || currentTarget.type !== "city") return;
+            if (d.id === currentTarget.id) {
+                d3.select(this).classed('city-guessed', true);
+                success();
+            } else {
+                fail();
+            }
+        }
+
+        function success() {
+            score++; showFeedback("Perfekt!", "text-green-500");
+            updateUI(); nextTurn();
+        }
+
+        function fail() {
+            mistakes++; showFeedback("Feil sted!", "text-red-500");
+            updateUI();
+        }
+
+        function updateTimer() {
+            const sec = Math.floor((Date.now() - startTime) / 1000);
+            document.getElementById('timer').innerText = `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;
+        }
+
+        function updateUI() {
+            document.getElementById('score').innerText = score;
+            document.getElementById('mistakes-counter').innerText = mistakes;
+        }
+
+        function showFeedback(text, cls) {
+            const fb = document.getElementById('feedback');
+            fb.innerText = text; fb.className = `absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 text-6xl font-black opacity-100 pointer-events-none drop-shadow-lg ${cls}`;
+            setTimeout(() => fb.style.opacity = 0, 800);
+        }
+
+        function endGame() {
+            clearInterval(timerInterval);
+            document.getElementById('modal').classList.remove('hidden');
+            document.getElementById('game-over-stats').classList.remove('hidden');
+            document.getElementById('final-score').innerText = score;
+            document.getElementById('final-mistakes').innerText = mistakes;
+            document.getElementById('final-time').innerText = document.getElementById('timer').innerText;
+        }
+
+        document.getElementById('start-btn').onclick = startGame;
+    </script>
+</body>
+</html>

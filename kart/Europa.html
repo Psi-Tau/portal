@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Europakart på Verdenskart</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- D3.js for kart og interaksjon -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            overflow: hidden;
+        }
+        
+        /* Kartstiler */
+        .country {
+            stroke: #94a3b8;
+            stroke-width: 0.5px;
+            vector-effect: non-scaling-stroke;
+            transition: fill 0.2s ease;
+        }
+        
+        .europe-country {
+            fill: #ffffff;
+            cursor: pointer;
+        }
+        
+        .europe-country:hover {
+            fill: #e2e8f0;
+        }
+        
+        /* Gjør land utenfor Europa klikkbare, slik at man kan få feil på dem */
+        .other-country {
+            fill: #cbd5e1;
+            cursor: pointer;
+        }
+
+        .other-country:hover {
+            fill: #94a3b8;
+        }
+        
+        .guessed {
+            fill: #4ade80 !important;
+            pointer-events: none;
+        }
+
+        .wrong {
+            fill: #f87171 !important;
+        }
+
+        /* Verktøytips */
+        #tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 50;
+        }
+    </style>
+</head>
+<body class="bg-blue-50 h-screen w-screen flex flex-col relative">
+
+    <!-- Toppmeny / UI -->
+    <header class="absolute top-0 left-0 w-full p-4 z-10 flex flex-col md:flex-row justify-between items-center gap-4 pointer-events-none">
+        <div class="bg-white/90 shadow-lg rounded-xl p-4 pointer-events-auto w-full md:w-auto text-center">
+            <h1 class="text-2xl font-bold text-gray-800">Europakart Spill</h1>
+            <p class="text-sm text-gray-500">Finn europeiske land på verdenskartet</p>
+        </div>
+        
+        <div id="game-status" class="hidden bg-white/95 shadow-lg rounded-xl p-4 pointer-events-auto flex flex-col items-center border-b-4 border-blue-500">
+            <div class="text-gray-600 text-sm font-semibold uppercase tracking-wider mb-1">Finn dette landet:</div>
+            <div id="target-country" class="text-3xl font-bold text-blue-600 mb-2">Norge</div>
+            <div class="flex gap-4 text-sm font-semibold text-gray-700">
+                <span>Poeng: <span id="score">0</span> / <span id="total-countries">0</span></span>
+                <span>Feil: <span id="mistakes" class="text-red-500">0</span></span>
+                <span>Tid: <span id="timer" class="text-blue-500 font-mono">00:00</span></span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Feedback Overlay -->
+    <div id="feedback" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 text-4xl md:text-6xl font-bold opacity-0 transition-opacity duration-300 pointer-events-none drop-shadow-md text-center w-full">
+        Riktig!
+    </div>
+
+    <!-- Verktøytips -->
+    <div id="tooltip"></div>
+
+    <!-- Kartkonteiner -->
+    <main class="flex-grow w-full h-full cursor-grab active:cursor-grabbing" id="map-container">
+        <svg id="map" class="w-full h-full"></svg>
+    </main>
+
+    <!-- Start/Laste-skjerm Modal -->
+    <div id="modal" class="absolute inset-0 bg-gray-900/40 backdrop-blur-sm z-30 flex items-center justify-center">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full text-center">
+            <h2 class="text-3xl font-bold text-gray-800 mb-4">Europa på Verdenskartet!</h2>
+            <p id="loading-text" class="text-gray-600 mb-6">Laster inn kartdata...</p>
+            <button id="start-btn" class="hidden w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl transition duration-200 transform hover:scale-105">
+                Start Spill
+            </button>
+            <div id="game-over-stats" class="hidden mt-4 text-left bg-gray-50 p-4 rounded-lg">
+                <p class="font-semibold text-lg mb-2 border-b pb-1">Resultat:</p>
+                <p>Riktige: <span id="final-score" class="text-green-600 font-bold">0</span></p>
+                <p>Feil: <span id="final-mistakes" class="text-red-600 font-bold">0</span></p>
+                <p>Tid brukt: <span id="final-time" class="text-blue-600 font-bold font-mono">00:00</span></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Ordbok for å oversette engelske kartnavn til norsk og filtrere ut KUN europeiske land
+        const europeData = {
+            "Norway": "Norge",
+            "Sweden": "Sverige",
+            "Finland": "Finland",
+            "Denmark": "Danmark",
+            "Iceland": "Island",
+            "United Kingdom": "Storbritannia",
+            "England": "Storbritannia",
+            "Ireland": "Irland",
+            "Germany": "Tyskland",
+            "France": "Frankrike",
+            "Spain": "Spania",
+            "Portugal": "Portugal",
+            "Italy": "Italia",
+            "Poland": "Polen",
+            "Netherlands": "Nederland",
+            "Belgium": "Belgia",
+            "Switzerland": "Sveits",
+            "Austria": "Østerrike",
+            "Czech Republic": "Tsjekkia",
+            "Slovakia": "Slovakia",
+            "Hungary": "Ungarn",
+            "Romania": "Romania",
+            "Bulgaria": "Bulgaria",
+            "Greece": "Hellas",
+            "Ukraine": "Ukraina",
+            "Belarus": "Hviterussland",
+            "Estonia": "Estland",
+            "Latvia": "Latvia",
+            "Lithuania": "Litauen",
+            "Moldova": "Moldova",
+            "Serbia": "Serbia",
+            "Republic of Serbia": "Serbia",
+            "Croatia": "Kroatia",
+            "Bosnia and Herzegovina": "Bosnia-Hercegovina",
+            "Albania": "Albania",
+            "Macedonia": "Nord-Makedonia",
+            "North Macedonia": "Nord-Makedonia",
+            "Slovenia": "Slovenia",
+            "Montenegro": "Montenegro",
+            "Kosovo": "Kosovo",
+            "Luxembourg": "Luxembourg",
+            "Cyprus": "Kypros",
+            "Russia": "Russland",
+            "Turkey": "Tyrkia"
+        };
+
+        // Variabler
+        let gameQueue = [];
+        let currentTarget = null;
+        let score = 0;
+        let mistakes = 0;
+        let totalCountries = 0;
+        let isWaitingForAnimation = false;
+        
+        // Timer
+        let startTime = null;
+        let timerInterval = null;
+
+        // D3 Oppsett
+        const width = 1000;
+        const height = 650;
+        const svg = d3.select("#map")
+            .attr("viewBox", `0 0 ${width} ${height}`)
+            .attr("preserveAspectRatio", "xMidYMid meet");
+
+        const g = svg.append("g");
+
+        // Zoom: Økt maks zoom slik at man kan finne knøttsmå land
+        const zoom = d3.zoom()
+            .scaleExtent([1, 15]) 
+            .translateExtent([[0, 0], [width, height]])
+            .on("zoom", (event) => {
+                g.attr("transform", event.transform);
+            });
+        
+        svg.call(zoom);
+
+        // Projeksjon for verdenskart (gir kloden en fin buet form i stedet for helt firkantet)
+        const projection = d3.geoNaturalEarth1()
+            .scale(180)
+            .translate([width / 2, height / 2.2]);
+
+        const path = d3.geoPath().projection(projection);
+        const tooltip = d3.select("#tooltip");
+
+        // Hent data
+        d3.json("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson")
+            .then(data => {
+                g.selectAll("path")
+                    .data(data.features)
+                    .enter()
+                    .append("path")
+                    .attr("d", path)
+                    .attr("class", d => {
+                        const engName = d.properties.name;
+                        // Hvis landet er i Europa, får det "europe-country" klassen. Hvis ikke "other-country".
+                        return europeData[engName] ? "country europe-country" : "country other-country";
+                    })
+                    .on("click", handleCountryClick)
+                    .on("mousemove", handleMouseMove)
+                    .on("mouseleave", handleMouseLeave);
+
+                document.getElementById('loading-text').classList.add('hidden');
+                document.getElementById('start-btn').classList.remove('hidden');
+            })
+            .catch(error => console.error("Error loading map data:", error));
+
+        document.getElementById('start-btn').addEventListener('click', startGame);
+
+        function updateTimer() {
+            const nå = Math.floor((Date.now() - startTime) / 1000);
+            const minutter = String(Math.floor(nå / 60)).padStart(2, '0');
+            const sekunder = String(nå % 60).padStart(2, '0');
+            document.getElementById('timer').innerText = `${minutter}:${sekunder}`;
+        }
+
+        function startGame() {
+            document.getElementById('modal').classList.add('hidden');
+            document.getElementById('game-status').classList.remove('hidden');
+            document.getElementById('game-over-stats').classList.add('hidden');
+            
+            score = 0;
+            mistakes = 0;
+            updateScoreUI();
+            
+            clearInterval(timerInterval);
+            document.getElementById('timer').innerText = "00:00";
+            startTime = Date.now();
+            timerInterval = setInterval(updateTimer, 1000);
+            
+            // Lag listen over unike europeiske land vi skal gjette på
+            const availableCountries = Array.from(new Set(Object.values(europeData)));
+            totalCountries = availableCountries.length;
+            document.getElementById('total-countries').innerText = totalCountries;
+
+            // Nullstill farger på kartet
+            d3.selectAll('.country')
+                .classed('guessed', false)
+                .classed('wrong', false);
+
+            // Stokk rekkefølgen tilfeldig
+            gameQueue = availableCountries.sort(() => Math.random() - 0.5);
+            nextTurn();
+        }
+
+        function nextTurn() {
+            if (gameQueue.length === 0) {
+                endGame();
+                return;
+            }
+            currentTarget = gameQueue.pop();
+            document.getElementById('target-country').innerText = currentTarget;
+        }
+
+        function handleCountryClick(event, d) {
+            if (isWaitingForAnimation || !currentTarget) return;
+
+            const clickedEngName = d.properties.name;
+            const clickedNorName = europeData[clickedEngName]; // Returnerer undefined hvis det ikke er Europa
+
+            const element = d3.select(this);
+            if (element.classed('guessed')) return;
+
+            // Hvis man trykket på riktig land
+            if (clickedNorName === currentTarget) {
+                score++;
+                element.classed('guessed', true);
+                showFeedback("Riktig!", "text-green-500");
+                updateScoreUI();
+                nextTurn();
+            } 
+            // Hvis man trykket feil
+            else {
+                mistakes++;
+                updateScoreUI();
+                element.classed('wrong', true);
+                
+                // Forteller spilleren hva de faktisk trykket på. (Bruker engelsk navn hvis vi ikke har norsk oversettelse).
+                const visningsNavn = clickedNorName || clickedEngName; 
+                showFeedback(`Feil! Dette er ${visningsNavn}`, "text-red-500");
+                
+                isWaitingForAnimation = true;
+                setTimeout(() => {
+                    element.classed('wrong', false);
+                    isWaitingForAnimation = false;
+                }, 1500);
+            }
+        }
+
+        function handleMouseMove(event, d) {
+            const engName = d.properties.name;
+            const norName = europeData[engName] || engName;
+            const element = d3.select(this);
+
+            // Vis verktøytips kun hvis man holder over et land som allerede er gjettet riktig, eller hvis spillet er ferdig
+            if (element.classed('guessed') || !currentTarget) {
+                tooltip.style("opacity", 1)
+                    .html(norName)
+                    .style("left", (event.pageX + 15) + "px")
+                    .style("top", (event.pageY - 28) + "px");
+            } else {
+                tooltip.style("opacity", 0);
+            }
+        }
+
+        function handleMouseLeave() {
+            tooltip.style("opacity", 0);
+        }
+
+        function updateScoreUI() {
+            document.getElementById('score').innerText = score;
+            document.getElementById('mistakes').innerText = mistakes;
+        }
+
+        function showFeedback(text, colorClass) {
+            const fb = document.getElementById('feedback');
+            fb.innerText = text;
+            fb.className = `absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 text-4xl md:text-6xl font-bold drop-shadow-lg transition-opacity duration-300 pointer-events-none ${colorClass}`;
+            fb.style.opacity = 1;
+            
+            setTimeout(() => {
+                fb.style.opacity = 0;
+            }, 1200);
+        }
+
+        function endGame() {
+            currentTarget = null;
+            clearInterval(timerInterval);
+            
+            document.getElementById('modal').classList.remove('hidden');
+            document.getElementById('game-status').classList.add('hidden');
+            document.querySelector('#modal h2').innerText = "Europa er erobret!";
+            document.getElementById('start-btn').innerText = "Spill igjen";
+            
+            document.getElementById('game-over-stats').classList.remove('hidden');
+            document.getElementById('final-score').innerText = score;
+            document.getElementById('final-mistakes').innerText = mistakes;
+            document.getElementById('final-time').innerText = document.getElementById('timer').innerText;
+        }
+    </script>
+</body>
+</html>
